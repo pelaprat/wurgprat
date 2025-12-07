@@ -1,10 +1,19 @@
 "use client";
 
 import { useSession, signIn } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import Link from "next/link";
 
 export default function Home() {
   const { data: session, status } = useSession();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (session && session.hasHousehold === false) {
+      router.push("/onboarding");
+    }
+  }, [session, router]);
 
   if (status === "loading") {
     return (
@@ -120,19 +129,6 @@ export default function Home() {
           </h2>
           <p className="text-gray-600">
             Check your shopping list and mark items as bought.
-          </p>
-        </Link>
-
-        <Link
-          href="/settings"
-          className="p-6 bg-white rounded-xl shadow-sm border-2 border-transparent hover:border-emerald-500 transition-colors group"
-        >
-          <div className="text-4xl mb-4">⚙️</div>
-          <h2 className="text-xl font-semibold mb-2 group-hover:text-emerald-600">
-            Settings
-          </h2>
-          <p className="text-gray-600">
-            Manage your household and preferences.
           </p>
         </Link>
       </div>

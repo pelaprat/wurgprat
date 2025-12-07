@@ -61,12 +61,13 @@ create table recipes (
   google_sheet_id text,
   name text not null,
   description text,
+  source text,
   source_url text,
-  prep_time integer,
-  cook_time integer,
   servings integer,
   cost_rating integer check (cost_rating between 1 and 5),
-  user_rating numeric(2,1) check (user_rating between 1 and 5),
+  time_rating integer check (time_rating between 1 and 5),
+  rating_emily numeric(3,1),
+  rating_etienne numeric(3,1),
   yields_leftovers boolean default false,
   category text check (category in ('entree', 'side', 'dessert')),
   cuisine text,
@@ -80,9 +81,10 @@ create table recipes (
   updated_at timestamptz default now() not null
 );
 
-comment on column recipes.prep_time is 'Prep time in minutes';
-comment on column recipes.cook_time is 'Cook time in minutes';
-comment on column recipes.user_rating is 'Rating 1-5, allows 0.5 increments';
+comment on column recipes.source is 'Recipe source (e.g., NYT Cooking, Bon Appetit)';
+comment on column recipes.time_rating is 'Time rating 1-5 scale';
+comment on column recipes.rating_emily is 'Emily rating 1-5, allows 0.5 increments';
+comment on column recipes.rating_etienne is 'Etienne rating 1-5, allows 0.5 increments';
 
 -- Recipe Ingredients junction table (links recipes to ingredients)
 create table recipe_ingredients (
@@ -99,8 +101,8 @@ create table recipe_ingredients (
 
 comment on column recipe_ingredients.notes is 'Optional notes (e.g., diced, room temperature)';
 
--- Meal Plans table (weekly container for meals)
-create table meal_plans (
+-- Weekly Plan table (weekly container for meals and grocery list)
+create table weekly_plan (
   id uuid default uuid_generate_v4() primary key,
   household_id uuid references households(id) not null,
   week_of date not null,
@@ -111,12 +113,12 @@ create table meal_plans (
   unique(household_id, week_of)
 );
 
-comment on column meal_plans.week_of is 'Start date of the week (e.g., Saturday)';
+comment on column weekly_plan.week_of is 'Start date of the week (e.g., Saturday)';
 
--- Meals table (individual meal selections within a meal plan)
+-- Meals table (individual meal selections within a weekly plan)
 create table meals (
   id uuid default uuid_generate_v4() primary key,
-  meal_plan_id uuid references meal_plans(id) on delete cascade not null,
+  weekly_plan_id uuid references weekly_plan(id) on delete cascade not null,
   recipe_id uuid references recipes(id),
   day integer not null check (day between 1 and 7),
   meal_type text default 'dinner' check (meal_type in ('breakfast', 'lunch', 'dinner', 'snack')),
@@ -128,17 +130,29 @@ create table meals (
   created_by uuid references users(id),
   created_at timestamptz default now() not null,
 
-  unique(meal_plan_id, day, meal_type)
+  unique(weekly_plan_id, day, meal_type)
 );
 
 comment on column meals.day is 'Day of week (1-7, where 1 = first day of week)';
 comment on column meals.leftover_source_id is 'Which meal is this leftover from?';
 
--- Grocery Items table (shopping list items linked to a meal plan)
+-- Grocery List table (shopping list for a weekly plan)
+create table grocery_list (
+  id uuid default uuid_generate_v4() primary key,
+  weekly_plan_id uuid references weekly_plan(id) on delete cascade not null,
+  notes text,
+  created_by uuid references users(id),
+  created_at timestamptz default now() not null,
+
+  unique(weekly_plan_id)
+);
+
+comment on table grocery_list is 'One grocery list per weekly plan';
+
+-- Grocery Items table (individual items on a grocery list)
 create table grocery_items (
   id uuid default uuid_generate_v4() primary key,
-  household_id uuid references households(id) not null,
-  meal_plan_id uuid references meal_plans(id) on delete cascade,
+  grocery_list_id uuid references grocery_list(id) on delete cascade not null,
   ingredient_id uuid references ingredients(id) not null,
   quantity numeric,
   unit text,
@@ -159,8 +173,9 @@ alter table stores enable row level security;
 alter table ingredients enable row level security;
 alter table recipes enable row level security;
 alter table recipe_ingredients enable row level security;
-alter table meal_plans enable row level security;
+alter table weekly_plan enable row level security;
 alter table meals enable row level security;
+alter table grocery_list enable row level security;
 alter table grocery_items enable row level security;
 
 -- Helper function to get current user's household_id
@@ -195,19 +210,31 @@ create policy "Users can manage recipe ingredients" on recipe_ingredients
     recipe_id in (select id from recipes where household_id = get_user_household_id())
   );
 
--- Meal Plans: users can manage meal plans in their household
-create policy "Users can manage household meal plans" on meal_plans
+-- Weekly Plan: users can manage weekly plans in their household
+create policy "Users can manage household weekly plans" on weekly_plan
   for all using (household_id = get_user_household_id());
 
--- Meals: users can manage meals in their meal plans
+-- Meals: users can manage meals in their weekly plans
 create policy "Users can manage meals" on meals
   for all using (
-    meal_plan_id in (select id from meal_plans where household_id = get_user_household_id())
+    weekly_plan_id in (select id from weekly_plan where household_id = get_user_household_id())
   );
 
--- Grocery Items: users can manage grocery items in their household
-create policy "Users can manage household groceries" on grocery_items
-  for all using (household_id = get_user_household_id());
+-- Grocery List: users can manage grocery lists in their weekly plans
+create policy "Users can manage grocery lists" on grocery_list
+  for all using (
+    weekly_plan_id in (select id from weekly_plan where household_id = get_user_household_id())
+  );
+
+-- Grocery Items: users can manage grocery items in their grocery lists
+create policy "Users can manage grocery items" on grocery_items
+  for all using (
+    grocery_list_id in (
+      select gl.id from grocery_list gl
+      join weekly_plan wp on gl.weekly_plan_id = wp.id
+      where wp.household_id = get_user_household_id()
+    )
+  );
 
 -- ============================================================================
 -- INDEXES
@@ -222,10 +249,11 @@ create index idx_recipes_household on recipes(household_id);
 create index idx_recipes_status on recipes(household_id, status);
 create index idx_recipe_ingredients_recipe on recipe_ingredients(recipe_id);
 create index idx_recipe_ingredients_ingredient on recipe_ingredients(ingredient_id);
-create index idx_meal_plans_household_week on meal_plans(household_id, week_of);
-create index idx_meals_meal_plan on meals(meal_plan_id);
+create index idx_weekly_plan_household_week on weekly_plan(household_id, week_of);
+create index idx_meals_weekly_plan on meals(weekly_plan_id);
 create index idx_meals_recipe on meals(recipe_id);
-create index idx_grocery_items_meal_plan on grocery_items(meal_plan_id);
+create index idx_grocery_list_weekly_plan on grocery_list(weekly_plan_id);
+create index idx_grocery_items_grocery_list on grocery_items(grocery_list_id);
 create index idx_grocery_items_ingredient on grocery_items(ingredient_id);
 
 -- ============================================================================

@@ -1,5 +1,6 @@
 import { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
+import { getServiceSupabase } from "./supabase";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -14,6 +15,7 @@ export const authOptions: NextAuthOptions = {
             "profile",
             "https://www.googleapis.com/auth/calendar",
             "https://www.googleapis.com/auth/drive.file",
+            "https://www.googleapis.com/auth/spreadsheets.readonly",
           ].join(" "),
           prompt: "consent",
           access_type: "offline",
@@ -23,6 +25,36 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
+    async signIn({ user, profile }) {
+      // Create or update user in database on sign-in
+      const supabase = getServiceSupabase();
+
+      const { data: existingUser } = await supabase
+        .from("users")
+        .select("id, household_id")
+        .eq("email", user.email)
+        .single();
+
+      if (!existingUser) {
+        // Create new user
+        await supabase.from("users").insert({
+          email: user.email,
+          name: user.name,
+          picture: (profile as { picture?: string })?.picture || user.image,
+        });
+      } else {
+        // Update existing user's profile
+        await supabase
+          .from("users")
+          .update({
+            name: user.name,
+            picture: (profile as { picture?: string })?.picture || user.image,
+          })
+          .eq("email", user.email);
+      }
+
+      return true;
+    },
     async jwt({ token, account }) {
       // Persist the OAuth access_token and refresh_token to the token
       if (account) {
@@ -35,6 +67,19 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       // Send properties to the client
       session.accessToken = token.accessToken as string;
+
+      // Check if user has a household
+      if (session.user?.email) {
+        const supabase = getServiceSupabase();
+        const { data: user } = await supabase
+          .from("users")
+          .select("household_id")
+          .eq("email", session.user.email)
+          .single();
+
+        session.hasHousehold = !!user?.household_id;
+      }
+
       return session;
     },
   },

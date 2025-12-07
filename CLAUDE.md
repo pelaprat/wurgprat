@@ -23,12 +23,11 @@ This is a Next.js 14 App Router application for meal planning with household sha
 
 ### Data Model
 
-All data is scoped to households (multi-user sharing):
-- `households` - Groups users together
-- `users` - Links Google accounts to households
-- `meals` - Recipe library with ingredients
-- `meal_plans` - Daily meal assignments (breakfast/lunch/dinner/snack)
-- `grocery_items` - Shopping list items, optionally linked to meal plans
+You will find a description of the data model in `docs/DATA_MODEL.md`.
+
+### UI Spec
+
+You will find a description of the UI specs to follow in `docs/UI_SPECS.md`.
 
 Database schema is in `supabase-schema.sql`.
 

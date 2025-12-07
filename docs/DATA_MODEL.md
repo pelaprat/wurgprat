@@ -15,27 +15,30 @@ All data is stored in Supabase (PostgreSQL). Data is scoped to households — us
     │                     │                     │              │
     ▼                     ▼                     ▼              ▼
 ┌──────────┐       ┌─────────────┐       ┌─────────────┐   ┌────────┐
-│ recipes  │       │ meal_plans  │       │ ingredients │   │ stores │
+│ recipes  │       │ weekly_plan │       │ ingredients │   │ stores │
 └──────────┘       └─────────────┘       └─────────────┘   └────────┘
     │                     │                  │    │             │
-    │                     ▼                  │    └─────────────┘
-    │               ┌──────────┐             │    ingredients.store_id
-    │               │  meals   │             │    references stores.id
-    │               └──────────┘             │
-    │                     │                  │
-    └─────────────────────┘                  │
-     meals.recipe_id                         │
-     references recipes.id                   │
-                                             │
-    ┌────────────────────────────────────────┤
-    │                                        │
-    ▼                                        ▼
-┌────────────────────┐               ┌───────────────┐
-│ recipe_ingredients │               │ grocery_items │
-│  - recipe_id (FK)  │               │  - ingredient_id (FK)
-│  - ingredient_id   │               │  - quantity
-│  - quantity, unit  │               │  - unit
-└────────────────────┘               └───────────────┘
+    │              ┌──────┴──────┐           │    └─────────────┘
+    │              │             │           │    ingredients.store_id
+    │              ▼             ▼           │    references stores.id
+    │        ┌──────────┐  ┌──────────────┐  │
+    │        │  meals   │  │ grocery_list │  │
+    │        └──────────┘  └──────────────┘  │
+    │              │             │           │
+    └──────────────┘             ▼           │
+     meals.recipe_id      ┌───────────────┐  │
+     references           │ grocery_items │◀─┘
+     recipes.id           │  - grocery_list_id (FK)
+                          │  - ingredient_id (FK)
+    ┌─────────────────────┤  - quantity, unit
+    │                     └───────────────┘
+    ▼
+┌────────────────────┐
+│ recipe_ingredients │
+│  - recipe_id (FK)  │
+│  - ingredient_id   │
+│  - quantity, unit  │
+└────────────────────┘
 ```
 
 ## Tables
@@ -90,7 +93,7 @@ Master list of all ingredients for the household. Each ingredient has a preferre
 **Unique constraint:** (household_id, name)
 
 ### recipes
-Recipe definitions loaded from Google Sheets. Reusable across meal plans.
+Recipe definitions loaded from Google Sheets. Reusable across weekly plans.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -99,12 +102,13 @@ Recipe definitions loaded from Google Sheets. Reusable across meal plans.
 | google_sheet_id | text | Google Sheet ID where recipe is stored |
 | name | text | Recipe name |
 | description | text | Short description |
+| source | text | Recipe source (e.g., "NYT Cooking", "Bon Appetit") |
 | source_url | text | Original recipe URL |
-| prep_time | integer | Minutes |
-| cook_time | integer | Minutes |
 | servings | integer | Number of servings |
 | cost_rating | integer | 1-5 scale |
-| user_rating | numeric | 1-5, allows 0.5 |
+| time_rating | integer | 1-5 scale (how long it takes) |
+| rating_emily | numeric(3,1) | Rating with 1 decimal place |
+| rating_etienne | numeric(3,1) | Rating with 1 decimal place |
 | yields_leftovers | boolean | Default false |
 | category | text | "entree", "side", "dessert" |
 | cuisine | text | E.g., "Italian", "Asian" |
@@ -132,8 +136,8 @@ Links recipes to ingredients with quantity/unit specific to that recipe.
 
 **Unique constraint:** (recipe_id, ingredient_id)
 
-### meal_plans
-A weekly meal plan container. Contains meals as children.
+### weekly_plan
+A weekly plan container. Contains meals and grocery items as children.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -147,12 +151,12 @@ A weekly meal plan container. Contains meals as children.
 **Unique constraint:** (household_id, week_of)
 
 ### meals
-Individual meal selections within a meal plan.
+Individual meal selections within a weekly plan.
 
 | Column | Type | Description |
 |--------|------|-------------|
 | id | uuid | Primary key |
-| meal_plan_id | uuid | FK → meal_plans.id |
+| weekly_plan_id | uuid | FK → weekly_plan.id |
 | recipe_id | uuid | FK → recipes.id (nullable) |
 | day | integer | Day of week (1-7, where 1 = first day of week) |
 | meal_type | text | "breakfast", "lunch", "dinner", "snack" (default: "dinner") |
@@ -164,16 +168,28 @@ Individual meal selections within a meal plan.
 | created_by | uuid | FK → users.id |
 | created_at | timestamptz | |
 
-**Unique constraint:** (meal_plan_id, day, meal_type)
+**Unique constraint:** (weekly_plan_id, day, meal_type)
 
-### grocery_items
-Shopping list items for the household, linked to a meal plan. References an ingredient.
+### grocery_list
+A shopping list for a weekly plan.
 
 | Column | Type | Description |
 |--------|------|-------------|
 | id | uuid | Primary key |
-| household_id | uuid | FK → households.id |
-| meal_plan_id | uuid | FK → meal_plans.id |
+| weekly_plan_id | uuid | FK → weekly_plan.id |
+| notes | text | Notes for the grocery list |
+| created_by | uuid | FK → users.id |
+| created_at | timestamptz | |
+
+**Unique constraint:** (weekly_plan_id) — one grocery list per weekly plan
+
+### grocery_items
+Individual items on a grocery list. References an ingredient.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| grocery_list_id | uuid | FK → grocery_list.id |
 | ingredient_id | uuid | FK → ingredients.id |
 | quantity | numeric | Amount to buy |
 | unit | text | Unit of measure |
@@ -204,11 +220,11 @@ CREATE POLICY "Users can manage household data" ON table_name
 
 ## Common Queries
 
-### Get a week's meal plan with meals and recipes
+### Get a weekly plan with meals and recipes
 ```sql
 SELECT
-  mp.id as meal_plan_id,
-  mp.week_of,
+  wp.id as weekly_plan_id,
+  wp.week_of,
   m.day,
   m.meal_type,
   m.is_leftover,
@@ -216,15 +232,15 @@ SELECT
   r.name as recipe_name,
   r.prep_time,
   r.cook_time
-FROM meal_plans mp
-JOIN meals m ON m.meal_plan_id = mp.id
+FROM weekly_plan wp
+JOIN meals m ON m.weekly_plan_id = wp.id
 LEFT JOIN recipes r ON m.recipe_id = r.id
-WHERE mp.household_id = $1
-  AND mp.week_of = $2
+WHERE wp.household_id = $1
+  AND wp.week_of = $2
 ORDER BY m.day, m.meal_type;
 ```
 
-### Get shopping list for a meal plan
+### Get grocery list for a weekly plan
 ```sql
 SELECT
   gi.*,
@@ -232,10 +248,11 @@ SELECT
   i.department,
   s.name as store_name,
   s.sort_order as store_order
-FROM grocery_items gi
+FROM grocery_list gl
+JOIN grocery_items gi ON gi.grocery_list_id = gl.id
 JOIN ingredients i ON gi.ingredient_id = i.id
 LEFT JOIN stores s ON i.store_id = s.id
-WHERE gi.meal_plan_id = $1
+WHERE gl.weekly_plan_id = $1
 ORDER BY s.sort_order, i.department, i.name;
 ```
 
@@ -280,10 +297,11 @@ CREATE INDEX idx_recipes_household ON recipes(household_id);
 CREATE INDEX idx_recipes_status ON recipes(household_id, status);
 CREATE INDEX idx_recipe_ingredients_recipe ON recipe_ingredients(recipe_id);
 CREATE INDEX idx_recipe_ingredients_ingredient ON recipe_ingredients(ingredient_id);
-CREATE INDEX idx_meal_plans_household_week ON meal_plans(household_id, week_of);
-CREATE INDEX idx_meals_meal_plan ON meals(meal_plan_id);
+CREATE INDEX idx_weekly_plan_household_week ON weekly_plan(household_id, week_of);
+CREATE INDEX idx_meals_weekly_plan ON meals(weekly_plan_id);
 CREATE INDEX idx_meals_recipe ON meals(recipe_id);
-CREATE INDEX idx_grocery_items_meal_plan ON grocery_items(meal_plan_id);
+CREATE INDEX idx_grocery_list_weekly_plan ON grocery_list(weekly_plan_id);
+CREATE INDEX idx_grocery_items_grocery_list ON grocery_items(grocery_list_id);
 CREATE INDEX idx_grocery_items_ingredient ON grocery_items(ingredient_id);
 ```
 

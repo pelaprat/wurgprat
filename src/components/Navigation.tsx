@@ -34,6 +34,12 @@ export default function Navigation() {
                 >
                   Grocery List
                 </Link>
+                <Link
+                  href="/settings"
+                  className="text-gray-600 hover:text-emerald-600 transition-colors"
+                >
+                  Settings
+                </Link>
               </div>
             )}
           </div>
