@@ -94,15 +94,28 @@ export default function Home() {
 
       <div className="grid md:grid-cols-2 gap-6">
         <Link
-          href="/meals"
+          href="/weekly-plans/create"
           className="p-6 bg-white rounded-xl shadow-sm border-2 border-transparent hover:border-emerald-500 transition-colors group"
         >
           <div className="text-4xl mb-4">📅</div>
           <h2 className="text-xl font-semibold mb-2 group-hover:text-emerald-600">
-            Plan This Week
+            Create Meal Plan
           </h2>
           <p className="text-gray-600">
-            View and edit your meal plan for the current week.
+            Plan your week with AI-powered suggestions and generate a grocery list.
+          </p>
+        </Link>
+
+        <Link
+          href="/weekly-plans"
+          className="p-6 bg-white rounded-xl shadow-sm border-2 border-transparent hover:border-emerald-500 transition-colors group"
+        >
+          <div className="text-4xl mb-4">📋</div>
+          <h2 className="text-xl font-semibold mb-2 group-hover:text-emerald-600">
+            View Weekly Plans
+          </h2>
+          <p className="text-gray-600">
+            See your current and past meal plans with grocery lists.
           </p>
         </Link>
 
@@ -116,19 +129,6 @@ export default function Home() {
           </h2>
           <p className="text-gray-600">
             View your saved recipes or add new favorites.
-          </p>
-        </Link>
-
-        <Link
-          href="/groceries"
-          className="p-6 bg-white rounded-xl shadow-sm border-2 border-transparent hover:border-emerald-500 transition-colors group"
-        >
-          <div className="text-4xl mb-4">🛒</div>
-          <h2 className="text-xl font-semibold mb-2 group-hover:text-emerald-600">
-            Grocery List
-          </h2>
-          <p className="text-gray-600">
-            Check your shopping list and mark items as bought.
           </p>
         </Link>
       </div>

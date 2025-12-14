@@ -3,12 +3,11 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getServiceSupabase } from "@/lib/supabase";
 import { readGoogleSheet, extractSpreadsheetId, extractGid } from "@/lib/google";
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { renderPrompt } from "@/prompts";
 
 interface SheetRow {
   name: string;
-  ratingEmily: number | null;
-  ratingEtienne: number | null;
   costRating: number | null;
   timeRating: number | null;
   source: string | null;
@@ -22,9 +21,16 @@ interface ExtractedIngredient {
   notes: string | null;
 }
 
+interface ExtractedRecipeData {
+  description: string;
+  category: string;
+  cuisine: string;
+  ingredients: ExtractedIngredient[];
+}
+
 interface SheetResult {
   url: string;
-  status: "active" | "wishlist";
+  status: "made" | "wishlist";
   success: boolean;
   error?: string;
   rowCount: number;
@@ -55,8 +61,6 @@ function parseSheetRow(row: string[], headers: string[]): SheetRow | null {
 
   return {
     name,
-    ratingEmily: parseRating(getCol("emily")),
-    ratingEtienne: parseRating(getCol("etienne")),
     costRating: parseRating(getCol("cost")),
     timeRating: parseRating(getCol("time")),
     source: getCol("recipe source"),
@@ -96,56 +100,69 @@ async function fetchWebPage(url: string): Promise<string> {
   }
 }
 
-// Use Claude to extract ingredients from recipe page content
-async function extractIngredients(
+// Use Gemini to extract recipe data from page content
+async function extractRecipeData(
   recipeName: string,
   pageContent: string
-): Promise<ExtractedIngredient[]> {
-  if (!pageContent) return [];
+): Promise<ExtractedRecipeData | null> {
+  if (!pageContent) return null;
 
-  const anthropic = new Anthropic();
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    console.error("GEMINI_API_KEY environment variable is not set");
+    return null;
+  }
 
-  const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 1024,
-    messages: [
-      {
-        role: "user",
-        content: `Extract the ingredients from this recipe page for "${recipeName}".
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-Return a JSON array of ingredients with this structure:
-[{"name": "ingredient name", "quantity": 2, "unit": "cups", "notes": "diced"}]
-
-- "name" should be the base ingredient (e.g., "chicken breast", "olive oil")
-- "quantity" should be a number or null if not specified
-- "unit" should be the unit of measure (e.g., "cups", "tbsp", "lbs") or null
-- "notes" should include preparation notes like "diced", "room temperature" or null
-
-Only return the JSON array, no other text.
-
-Page content:
-${pageContent}`,
-      },
-    ],
+  const prompt = renderPrompt("recipeExtraction", {
+    recipeName,
+    pageContent,
   });
 
   try {
-    const content = message.content[0];
-    if (content.type !== "text") return [];
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
 
-    const parsed = JSON.parse(content.text);
-    if (!Array.isArray(parsed)) return [];
+    // Try to parse the JSON, handling potential markdown code blocks
+    let jsonText = text.trim();
+    if (jsonText.startsWith("```json")) {
+      jsonText = jsonText.slice(7);
+    }
+    if (jsonText.startsWith("```")) {
+      jsonText = jsonText.slice(3);
+    }
+    if (jsonText.endsWith("```")) {
+      jsonText = jsonText.slice(0, -3);
+    }
+    jsonText = jsonText.trim();
 
-    return parsed.map((item: Record<string, unknown>) => ({
-      name: String(item.name || ""),
-      quantity:
-        typeof item.quantity === "number" ? item.quantity : null,
-      unit: typeof item.unit === "string" ? item.unit : null,
-      notes: typeof item.notes === "string" ? item.notes : null,
-    }));
+    const parsed = JSON.parse(jsonText);
+
+    // Normalize category
+    const validCategories = ["entree", "side", "dessert", "appetizer", "breakfast", "soup", "salad", "beverage"];
+    const category = validCategories.includes(String(parsed.category || "").toLowerCase())
+      ? String(parsed.category).toLowerCase()
+      : "entree";
+
+    return {
+      description: String(parsed.description || ""),
+      category,
+      cuisine: String(parsed.cuisine || "Other"),
+      ingredients: Array.isArray(parsed.ingredients)
+        ? parsed.ingredients.map((item: Record<string, unknown>) => ({
+            name: String(item.name || ""),
+            quantity: typeof item.quantity === "number" ? item.quantity : null,
+            unit: typeof item.unit === "string" ? item.unit : null,
+            notes: typeof item.notes === "string" ? item.notes : null,
+          }))
+        : [],
+    };
   } catch (error) {
-    console.error("Failed to parse ingredients:", error);
-    return [];
+    console.error("Failed to extract recipe data:", error);
+    return null;
   }
 }
 
@@ -184,10 +201,10 @@ export async function POST() {
   }
 
   const settings = household.settings || {};
-  const sheetConfigs: { url: string; status: "active" | "wishlist" }[] = [
-    { url: settings.cooked_recipes_sheet_url, status: "active" as const },
+  const sheetConfigs: { url: string; status: "made" | "wishlist" }[] = [
+    { url: settings.cooked_recipes_sheet_url, status: "made" as const },
     { url: settings.wishlist_recipes_sheet_url, status: "wishlist" as const },
-  ].filter((s): s is { url: string; status: "active" | "wishlist" } => Boolean(s.url));
+  ].filter((s): s is { url: string; status: "made" | "wishlist" } => Boolean(s.url));
 
   if (sheetConfigs.length === 0) {
     return NextResponse.json(
@@ -296,32 +313,33 @@ export async function POST() {
           continue;
         }
 
-        // Fetch ingredients from recipe URL
-        let ingredients: ExtractedIngredient[] = [];
+        // Fetch recipe data from recipe URL using AI
+        let extractedData: ExtractedRecipeData | null = null;
         if (recipe.sourceUrl) {
           try {
             const pageContent = await fetchWebPage(recipe.sourceUrl);
             if (pageContent) {
-              ingredients = await extractIngredients(recipe.name, pageContent);
+              extractedData = await extractRecipeData(recipe.name, pageContent);
             }
           } catch (err) {
-            console.error(`Failed to extract ingredients for ${recipe.name}:`, err);
+            console.error(`Failed to extract recipe data for ${recipe.name}:`, err);
           }
         }
 
-        // Insert the recipe
+        // Insert the recipe with AI-extracted data
         const { data: newRecipe, error: recipeError } = await supabase
           .from("recipes")
           .insert({
             household_id: user.household_id,
             google_sheet_id: spreadsheetId,
             name: recipe.name,
+            description: extractedData?.description || null,
+            category: extractedData?.category || null,
+            cuisine: extractedData?.cuisine || null,
             source: recipe.source,
             source_url: recipe.sourceUrl,
             cost_rating: recipe.costRating,
             time_rating: recipe.timeRating,
-            rating_emily: recipe.ratingEmily,
-            rating_etienne: recipe.ratingEtienne,
             status,
             created_by: user.id,
           })
@@ -335,6 +353,7 @@ export async function POST() {
         }
 
         // Insert ingredients
+        const ingredients = extractedData?.ingredients || [];
         for (let j = 0; j < ingredients.length; j++) {
           const ing = ingredients[j];
           if (!ing.name) continue;

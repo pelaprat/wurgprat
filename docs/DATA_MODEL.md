@@ -11,12 +11,12 @@ All data is stored in Supabase (PostgreSQL). Data is scoped to households — us
 │  users   │──────▶│  households  │
 └──────────┘   N:1 └──────────────┘
                           │
-    ┌─────────────────────┼─────────────────────┬──────────────┐
-    │                     │                     │              │
-    ▼                     ▼                     ▼              ▼
-┌──────────┐       ┌─────────────┐       ┌─────────────┐   ┌────────┐
-│ recipes  │       │ weekly_plan │       │ ingredients │   │ stores │
-└──────────┘       └─────────────┘       └─────────────┘   └────────┘
+    ┌─────────────────────┼─────────────────────┬──────────────┬──────────┐
+    │                     │                     │              │          │
+    ▼                     ▼                     ▼              ▼          ▼
+┌──────────┐       ┌─────────────┐       ┌─────────────┐   ┌────────┐ ┌────────┐
+│ recipes  │       │ weekly_plan │       │ ingredients │   │ stores │ │ events │
+└──────────┘       └─────────────┘       └─────────────┘   └────────┘ └────────┘
     │                     │                  │    │             │
     │              ┌──────┴──────┐           │    └─────────────┘
     │              │             │           │    ingredients.store_id
@@ -78,6 +78,26 @@ Stores where the household shops.
 
 **Unique constraint:** (household_id, name)
 
+### events
+Household events imported from Google Calendar (e.g., kids activities). Used to inform meal planning decisions - on busy evenings, quick meals or leftovers are preferred.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| household_id | uuid | FK → households.id |
+| google_calendar_id | text | Google Calendar ID this event came from |
+| google_event_id | text | Google Calendar event ID (for deduplication) |
+| title | text | Event title |
+| description | text | Event description |
+| start_time | timestamptz | Event start time |
+| end_time | timestamptz | Event end time |
+| all_day | boolean | Is this an all-day event? |
+| location | text | Event location |
+| created_at | timestamptz | Creation timestamp |
+| updated_at | timestamptz | Last updated timestamp |
+
+**Unique constraint:** (household_id, google_event_id)
+
 ### ingredients
 Master list of all ingredients for the household. Each ingredient has a preferred store.
 
@@ -115,7 +135,7 @@ Recipe definitions loaded from Google Sheets. Reusable across weekly plans.
 | instructions | text | Cooking instructions |
 | notes | text | Personal notes |
 | tags | text[] | Array of tags |
-| status | text | "active", "wishlist", "archived" |
+| status | text | "made", "wishlist" |
 | last_made | date | When last cooked |
 | created_by | uuid | FK → users.id |
 | created_at | timestamptz | |
@@ -303,6 +323,8 @@ CREATE INDEX idx_meals_recipe ON meals(recipe_id);
 CREATE INDEX idx_grocery_list_weekly_plan ON grocery_list(weekly_plan_id);
 CREATE INDEX idx_grocery_items_grocery_list ON grocery_items(grocery_list_id);
 CREATE INDEX idx_grocery_items_ingredient ON grocery_items(ingredient_id);
+CREATE INDEX idx_events_household ON events(household_id);
+CREATE INDEX idx_events_start_time ON events(household_id, start_time);
 ```
 
 ---
@@ -315,7 +337,9 @@ Stored in `households.settings`:
 {
   "default_meal_time": "19:00",
   "week_start_day": "saturday",
-  "calendar_id": "primary",
+  "cooked_recipes_sheet_url": "https://docs.google.com/spreadsheets/d/.../edit#gid=123",
+  "wishlist_recipes_sheet_url": "https://docs.google.com/spreadsheets/d/.../edit#gid=456",
+  "events_calendar_url": "https://calendar.google.com/calendar/ical/.../basic.ics",
   "departments": [
     "Produce",
     "Meat & Seafood",
@@ -327,5 +351,14 @@ Stored in `households.settings`:
   ]
 }
 ```
+
+| Setting | Description |
+|---------|-------------|
+| default_meal_time | Default time for dinner (HH:MM format) |
+| week_start_day | First day of the meal planning week |
+| cooked_recipes_sheet_url | Google Sheets URL for recipes already made (status: active) |
+| wishlist_recipes_sheet_url | Google Sheets URL for recipes to try (status: wishlist) |
+| events_calendar_url | ICS calendar URL for household events (e.g., kids activities) |
+| departments | Store sections for organizing grocery lists |
 
 Note: Stores are now managed in the `stores` table instead of settings.

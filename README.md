@@ -1,6 +1,6 @@
-# 🍽️ Meal Planner
+# Household Manager
 
-A web app for planning weekly meals and groceries together, with Google Calendar and Drive integration.
+A web app for household management including meal planning, recipes, groceries, and more - with Google Calendar and Drive integration.
 
 ## Features
 
@@ -28,7 +28,7 @@ A web app for planning weekly meals and groceries together, with Google Calendar
 
 ```bash
 git clone <your-repo-url>
-cd meal-planner
+cd household-manager
 npm install
 ```
 
@@ -137,7 +137,7 @@ Once deployed:
 ## Project Structure
 
 ```
-meal-planner/
+household-manager/
 ├── src/
 │   ├── app/
 │   │   ├── api/auth/[...nextauth]/  # Auth endpoint

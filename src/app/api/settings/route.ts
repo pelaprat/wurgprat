@@ -26,10 +26,10 @@ export async function GET() {
     );
   }
 
-  // Get household settings
+  // Get household settings and name
   const { data: household, error: householdError } = await supabase
     .from("households")
-    .select("settings")
+    .select("name, settings")
     .eq("id", user.household_id)
     .single();
 
@@ -40,7 +40,10 @@ export async function GET() {
     );
   }
 
-  return NextResponse.json({ settings: household.settings || {} });
+  return NextResponse.json({
+    name: household.name,
+    settings: household.settings || {}
+  });
 }
 
 export async function PUT(request: NextRequest) {
@@ -51,7 +54,7 @@ export async function PUT(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { cooked_recipes_sheet_url, wishlist_recipes_sheet_url } = body;
+  const { cooked_recipes_sheet_url, wishlist_recipes_sheet_url, google_calendar_id } = body;
 
   const supabase = getServiceSupabase();
 
@@ -81,6 +84,7 @@ export async function PUT(request: NextRequest) {
     ...(household?.settings || {}),
     cooked_recipes_sheet_url,
     wishlist_recipes_sheet_url,
+    google_calendar_id,
   };
 
   // Update household settings
