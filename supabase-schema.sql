@@ -149,6 +149,7 @@ create table weekly_plan (
 comment on column weekly_plan.week_of is 'Start date of the week (e.g., Saturday)';
 
 -- Meals table (individual meal selections within a weekly plan)
+-- NOTE: Multiple recipes per day are now supported (no unique constraint on day/meal_type)
 create table meals (
   id uuid default uuid_generate_v4() primary key,
   weekly_plan_id uuid references weekly_plan(id) on delete cascade not null,
@@ -163,9 +164,11 @@ create table meals (
   calendar_event_id text,
   created_by uuid references users(id),
   created_at timestamptz default now() not null,
-
-  unique(weekly_plan_id, day, meal_type)
+  sort_order integer default 0
 );
+
+-- MIGRATION: If you have an existing database with the old unique constraint, run:
+-- ALTER TABLE meals DROP CONSTRAINT IF EXISTS meals_weekly_plan_id_day_meal_type_key;
 
 comment on column meals.day is 'Day of week (1-7, where 1 = first day of week)';
 comment on column meals.leftover_source_id is 'Which meal is this leftover from?';

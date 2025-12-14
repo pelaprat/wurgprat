@@ -27,6 +27,7 @@ interface Event {
 }
 
 interface ProposedMeal {
+  mealId: string;
   day: number;
   date: string;
   recipeId?: string;
@@ -34,6 +35,7 @@ interface ProposedMeal {
   recipeTimeRating?: number;
   aiReasoning?: string;
   isAiSuggested: boolean;
+  sortOrder?: number;
 }
 
 // Get dates for a week starting from Saturday
@@ -267,7 +269,7 @@ export async function POST(request: NextRequest) {
         recipeId: string;
         recipeName: string;
         reasoning: string;
-      }) => {
+      }, index: number) => {
         // CRITICAL: Validate that the recipe ID exists in our household's recipes
         let recipeId = meal.recipeId;
         let recipe = recipeMap.get(recipeId);
@@ -310,14 +312,19 @@ export async function POST(request: NextRequest) {
 
         usedRecipeIds.add(recipeId);
 
+        // If the recipe was in the user's selected list, mark as NOT AI suggested
+        const wasUserSelected = selectedRecipeIds.includes(recipeId);
+
         return {
+          mealId: `meal-${Date.now()}-${index}-${Math.random().toString(36).substr(2, 9)}`,
           day: meal.day,
           date: meal.date,
           recipeId: recipeId,
           recipeName: recipe?.name || meal.recipeName || "Unknown",
           recipeTimeRating: recipe?.time_rating,
           aiReasoning: meal.reasoning,
-          isAiSuggested: true,
+          isAiSuggested: !wasUserSelected,
+          sortOrder: 0, // First meal of the day
         };
       }
     );

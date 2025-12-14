@@ -30,6 +30,14 @@ const DAY_NAMES = [
   "Friday",
 ];
 
+// Format date as YYYY-MM-DD in local timezone (not UTC)
+function formatDateLocal(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 const TIME_RATING_LABELS: Record<number, { label: string; color: string }> = {
   1: { label: "Very Quick", color: "bg-green-100 text-green-800" },
   2: { label: "Quick", color: "bg-green-100 text-green-800" },
@@ -40,14 +48,16 @@ const TIME_RATING_LABELS: Record<number, { label: string; color: string }> = {
 
 interface DraggableMealProps {
   meal: ProposedMeal;
-  onReplace: (day: number) => void;
+  onReplace: (mealId: string) => void;
+  onRemove: (mealId: string) => void;
   isReplacing: boolean;
+  canRemove: boolean;
 }
 
-function DraggableMeal({ meal, onReplace, isReplacing }: DraggableMealProps) {
+function DraggableMeal({ meal, onReplace, onRemove, isReplacing, canRemove }: DraggableMealProps) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: `meal-${meal.day}`,
-    data: { day: meal.day },
+    id: `meal-${meal.mealId}`,
+    data: { mealId: meal.mealId, day: meal.day },
   });
 
   const timeRating = meal.recipeTimeRating
@@ -68,7 +78,7 @@ function DraggableMeal({ meal, onReplace, isReplacing }: DraggableMealProps) {
             {...attributes}
             {...listeners}
             className="cursor-grab active:cursor-grabbing p-1 hover:bg-gray-100 rounded transition-colors flex-shrink-0 mt-0.5"
-            title="Drag to swap with another day"
+            title="Drag to swap with another meal"
           >
             <svg
               className="w-4 h-4 text-gray-400"
@@ -101,7 +111,7 @@ function DraggableMeal({ meal, onReplace, isReplacing }: DraggableMealProps) {
                 </span>
               ) : (
                 <span className="text-xs px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded">
-                  Modified
+                  Your pick
                 </span>
               )}
             </div>
@@ -113,15 +123,16 @@ function DraggableMeal({ meal, onReplace, isReplacing }: DraggableMealProps) {
           </div>
         </div>
 
-        <button
-          onClick={() => onReplace(meal.day)}
-          disabled={isReplacing}
-          className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 flex-shrink-0"
-        >
-          {isReplacing ? (
-            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-600"></div>
-          ) : (
-            <>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <button
+            onClick={() => onReplace(meal.mealId)}
+            disabled={isReplacing}
+            className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+            title="Get new suggestion"
+          >
+            {isReplacing ? (
+              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-600"></div>
+            ) : (
               <svg
                 className="w-3 h-3"
                 fill="none"
@@ -135,10 +146,20 @@ function DraggableMeal({ meal, onReplace, isReplacing }: DraggableMealProps) {
                   d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
                 />
               </svg>
-              Replace
-            </>
+            )}
+          </button>
+          {canRemove && (
+            <button
+              onClick={() => onRemove(meal.mealId)}
+              className="px-2 py-1.5 text-xs border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-1"
+              title="Remove meal"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           )}
-        </button>
+        </div>
       </div>
     </div>
   );
@@ -188,9 +209,11 @@ interface DaySlotProps {
   day: number;
   date: string;
   events: Event[];
-  meal: ProposedMeal | undefined;
-  onReplace: (day: number) => void;
-  isReplacing: boolean;
+  meals: ProposedMeal[];
+  onReplace: (mealId: string) => void;
+  onRemove: (mealId: string) => void;
+  onAddMeal: (day: number, date: string) => void;
+  replacingMealId: string | null;
   isDraggedOver: boolean;
 }
 
@@ -198,9 +221,11 @@ function DaySlot({
   day,
   date,
   events,
-  meal,
+  meals,
   onReplace,
-  isReplacing,
+  onRemove,
+  onAddMeal,
+  replacingMealId,
   isDraggedOver,
 }: DaySlotProps) {
   const { setNodeRef, isOver } = useDroppable({
@@ -216,13 +241,11 @@ function DaySlot({
     <div
       ref={setNodeRef}
       className={`bg-white rounded-xl shadow-sm border-2 overflow-hidden transition-colors ${
-        isHighlighted ? "border-emerald-500 bg-emerald-50/30" : "border-transparent"
+        isHighlighted ? "border-emerald-500 bg-emerald-50/30" : "border-gray-200"
       }`}
     >
-      {/* Day header - fixed position */}
-      <div
-        className={`px-4 py-2 ${isBusy ? "bg-amber-50" : "bg-gray-50"} border-b`}
-      >
+      {/* Day header - always grey */}
+      <div className="px-4 py-2 bg-gray-50 border-b">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="font-medium text-gray-900">{dayName}</span>
@@ -233,47 +256,76 @@ function DaySlot({
               })}
             </span>
           </div>
-          {isBusy && (
-            <span className="text-xs px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full">
-              {events.length} event{events.length > 1 ? "s" : ""}
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {isBusy && (
+              <span className="text-xs px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full">
+                {events.length} event{events.length > 1 ? "s" : ""}
+              </span>
+            )}
+            {meals.length > 0 && (
+              <span className="text-xs px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full">
+                {meals.length} dinner{meals.length > 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Events for the day */}
+      {/* Events for the day - individual events highlighted */}
       {events.length > 0 && (
-        <div className="px-4 py-2 bg-amber-50/50 border-b">
+        <div className="px-4 py-2 border-b">
           <div className="space-y-1">
             {events.map((event) => (
               <div
                 key={event.id}
-                className="text-xs text-amber-700 flex items-center gap-1"
+                className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1 flex items-center gap-1"
               >
-                <span className="font-medium">-</span>
-                {event.title}
-                {event.all_day
-                  ? " (All day)"
-                  : ` at ${new Date(event.start_time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`}
+                <svg className="w-3 h-3 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span className="font-medium">{event.title}</span>
+                <span className="text-amber-600">
+                  {event.all_day
+                    ? "(All day)"
+                    : `at ${new Date(event.start_time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`}
+                </span>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* Meal content - draggable */}
-      <div className="p-3">
-        {meal ? (
-          <DraggableMeal
-            meal={meal}
-            onReplace={onReplace}
-            isReplacing={isReplacing}
-          />
+      {/* Meals content - multiple meals supported */}
+      <div className="p-3 space-y-2">
+        {meals.length > 0 ? (
+          <>
+            {meals.map((meal) => (
+              <DraggableMeal
+                key={meal.mealId}
+                meal={meal}
+                onReplace={onReplace}
+                onRemove={onRemove}
+                isReplacing={replacingMealId === meal.mealId}
+                canRemove={meals.length > 1}
+              />
+            ))}
+          </>
         ) : (
           <div className="p-3 border-2 border-dashed border-gray-200 rounded-lg text-center text-gray-400">
             No meal planned
           </div>
         )}
+
+        {/* Add another meal button */}
+        <button
+          onClick={() => onAddMeal(day, date)}
+          className="w-full py-2 border-2 border-dashed border-gray-200 rounded-lg text-sm text-gray-500 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50/50 transition-colors flex items-center justify-center gap-1"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          Add another dinner
+        </button>
       </div>
     </div>
   );
@@ -284,9 +336,10 @@ export default function ReviewPage() {
   const router = useRouter();
   const wizard = useMealPlanWizard();
 
-  const [replacingDay, setReplacingDay] = useState<number | null>(null);
+  const [replacingMealId, setReplacingMealId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [activeDragDay, setActiveDragDay] = useState<number | null>(null);
+  const [activeDragMealId, setActiveDragMealId] = useState<string | null>(null);
+  const [isAddingMeal, setIsAddingMeal] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -307,9 +360,16 @@ export default function ReviewPage() {
   // Get events for each day
   const getEventsForDay = (date: string): Event[] => {
     return wizard.weekEvents.filter((event) => {
-      const eventDate = new Date(event.start_time).toISOString().split("T")[0];
+      const eventDate = formatDateLocal(new Date(event.start_time));
       return eventDate === date;
     });
+  };
+
+  // Get meals for each day
+  const getMealsForDay = (day: number): ProposedMeal[] => {
+    return wizard.proposedMeals
+      .filter((m) => m.day === day)
+      .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
   };
 
   // Get dates for the week
@@ -320,44 +380,64 @@ export default function ReviewPage() {
     for (let i = 0; i < 7; i++) {
       const date = new Date(start);
       date.setDate(start.getDate() + i);
-      dates.push(date.toISOString().split("T")[0]);
+      dates.push(formatDateLocal(date));
     }
     return dates;
   };
 
   // Handle drag start
   const handleDragStart = (event: DragStartEvent) => {
-    const day = event.active.data.current?.day;
-    if (day) {
-      setActiveDragDay(day);
+    const mealId = event.active.data.current?.mealId;
+    if (mealId) {
+      setActiveDragMealId(mealId);
     }
   };
 
   // Handle drag end
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    setActiveDragDay(null);
+    setActiveDragMealId(null);
 
     if (!over) return;
 
-    // Extract day numbers
-    const activeDay = active.data.current?.day;
-    const overDayMatch = (over.id as string).match(/day-(\d+)/);
-    const overDay = overDayMatch ? parseInt(overDayMatch[1]) : null;
+    const activeMealId = active.data.current?.mealId;
+    const overId = over.id as string;
 
-    if (activeDay && overDay && activeDay !== overDay) {
-      wizard.swapMeals(activeDay, overDay);
+    // If dropping on another meal, swap them
+    if (overId.startsWith("meal-")) {
+      const overMealId = overId.replace("meal-", "");
+      if (activeMealId && overMealId && activeMealId !== overMealId) {
+        wizard.swapMealsById(activeMealId, overMealId);
+      }
+    }
+    // If dropping on a day slot, move the meal to that day
+    else if (overId.startsWith("day-")) {
+      const overDayMatch = overId.match(/day-(\d+)/);
+      const overDay = overDayMatch ? parseInt(overDayMatch[1]) : null;
+      const activeMeal = wizard.proposedMeals.find((m) => m.mealId === activeMealId);
+
+      if (activeMeal && overDay && activeMeal.day !== overDay) {
+        const weekDates = getWeekDates();
+        const newDate = weekDates[overDay - 1];
+        wizard.updateMealById(activeMealId, {
+          day: overDay,
+          date: newDate,
+          isAiSuggested: false,
+        });
+      }
     }
   };
 
   // Handle replace meal
-  const handleReplaceMeal = async (day: number) => {
-    setReplacingDay(day);
+  const handleReplaceMeal = async (mealId: string) => {
+    setReplacingMealId(mealId);
     setError(null);
     wizard.setIsReplacingMeal(true);
 
     try {
-      const currentMeal = wizard.proposedMeals.find((m) => m.day === day);
+      const currentMeal = wizard.proposedMeals.find((m) => m.mealId === mealId);
+      if (!currentMeal) return;
+
       const usedRecipeIds = wizard.proposedMeals
         .filter((m) => m.recipeId)
         .map((m) => m.recipeId);
@@ -366,11 +446,11 @@ export default function ReviewPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          day,
-          date: currentMeal?.date,
-          currentRecipeId: currentMeal?.recipeId,
+          day: currentMeal.day,
+          date: currentMeal.date,
+          currentRecipeId: currentMeal.recipeId,
           excludeRecipeIds: usedRecipeIds,
-          events: getEventsForDay(currentMeal?.date || ""),
+          events: getEventsForDay(currentMeal.date || ""),
         }),
       });
 
@@ -380,17 +460,64 @@ export default function ReviewPage() {
       }
 
       const data = await response.json();
-      wizard.updateMeal(day, {
-        ...data.suggestion,
-        day,
-        date: currentMeal?.date || "",
+      wizard.updateMealById(mealId, {
+        recipeId: data.suggestion.recipeId,
+        recipeName: data.suggestion.recipeName,
+        recipeTimeRating: data.suggestion.recipeTimeRating,
+        aiReasoning: data.suggestion.aiReasoning,
         isAiSuggested: true,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
-      setReplacingDay(null);
+      setReplacingMealId(null);
       wizard.setIsReplacingMeal(false);
+    }
+  };
+
+  // Handle remove meal
+  const handleRemoveMeal = (mealId: string) => {
+    wizard.removeMeal(mealId);
+  };
+
+  // Handle add meal to day
+  const handleAddMeal = async (day: number, date: string) => {
+    setIsAddingMeal(true);
+    setError(null);
+
+    try {
+      const usedRecipeIds = wizard.proposedMeals
+        .filter((m) => m.recipeId)
+        .map((m) => m.recipeId);
+
+      const response = await fetch("/api/weekly-plans/suggest-replacement", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          day,
+          date,
+          excludeRecipeIds: usedRecipeIds,
+          events: getEventsForDay(date),
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to get suggestion");
+      }
+
+      const data = await response.json();
+      wizard.addMealToDay(day, date, {
+        recipeId: data.suggestion.recipeId,
+        recipeName: data.suggestion.recipeName,
+        recipeTimeRating: data.suggestion.recipeTimeRating,
+        aiReasoning: data.suggestion.aiReasoning,
+        isAiSuggested: true,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setIsAddingMeal(false);
     }
   };
 
@@ -416,8 +543,8 @@ export default function ReviewPage() {
   }
 
   const weekDates = getWeekDates();
-  const activeMeal = activeDragDay
-    ? wizard.proposedMeals.find((m) => m.day === activeDragDay)
+  const activeMeal = activeDragMealId
+    ? wizard.proposedMeals.find((m) => m.mealId === activeDragMealId)
     : null;
 
   return (
@@ -525,16 +652,18 @@ export default function ReviewPage() {
         <div className="space-y-4">
           {weekDates.map((date, index) => {
             const day = index + 1;
-            const meal = wizard.proposedMeals.find((m) => m.day === day);
+            const meals = getMealsForDay(day);
             return (
               <DaySlot
                 key={day}
                 day={day}
                 date={date}
                 events={getEventsForDay(date)}
-                meal={meal}
+                meals={meals}
                 onReplace={handleReplaceMeal}
-                isReplacing={replacingDay === day}
+                onRemove={handleRemoveMeal}
+                onAddMeal={handleAddMeal}
+                replacingMealId={replacingMealId}
                 isDraggedOver={false}
               />
             );
@@ -545,6 +674,16 @@ export default function ReviewPage() {
           {activeMeal ? <MealDragOverlay meal={activeMeal} /> : null}
         </DragOverlay>
       </DndContext>
+
+      {/* Loading overlay for adding meal */}
+      {isAddingMeal && (
+        <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-4 flex items-center gap-3">
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-emerald-600"></div>
+            <span className="text-gray-700">Getting AI suggestion...</span>
+          </div>
+        </div>
+      )}
 
       {/* Error message */}
       {error && (
