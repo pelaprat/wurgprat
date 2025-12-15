@@ -53,11 +53,15 @@ function getEventsForWeek(events: Event[], weekOf: string): Event[] {
 // Get last Saturday and next several Saturdays
 function getSaturdayOptions(): string[] {
   const today = new Date();
-  const dayOfWeek = today.getDay();
+  const dayOfWeek = today.getDay(); // 0 = Sunday, 6 = Saturday
 
-  // Get last Saturday
-  const lastSaturday = new Date(today);
+  // Calculate days since last Saturday
+  // If today is Saturday (6), we want to go back 7 days to get "last" Saturday
+  // If today is Sunday (0), we want to go back 1 day
+  // If today is Monday (1), we want to go back 2 days, etc.
   const daysToLastSaturday = dayOfWeek === 6 ? 7 : dayOfWeek + 1;
+
+  const lastSaturday = new Date(today);
   lastSaturday.setDate(today.getDate() - daysToLastSaturday);
 
   const saturdays: string[] = [];
@@ -66,7 +70,8 @@ function getSaturdayOptions(): string[] {
   for (let i = 0; i < 8; i++) {
     const saturday = new Date(lastSaturday);
     saturday.setDate(lastSaturday.getDate() + (i * 7));
-    saturdays.push(saturday.toISOString().split("T")[0]);
+    // Use local date formatting to avoid timezone issues
+    saturdays.push(formatDateLocal(saturday));
   }
 
   return saturdays;
@@ -75,11 +80,18 @@ function getSaturdayOptions(): string[] {
 // Get next Saturday (default selection)
 function getNextSaturday(): string {
   const today = new Date();
-  const dayOfWeek = today.getDay();
-  const daysUntilSaturday = (6 - dayOfWeek + 7) % 7 || 7;
+  const dayOfWeek = today.getDay(); // 0 = Sunday, 6 = Saturday
+
+  // Calculate days until next Saturday
+  // If today is Saturday, return next Saturday (7 days)
+  // If today is Sunday (0), next Saturday is 6 days away
+  // If today is Monday (1), next Saturday is 5 days away, etc.
+  const daysUntilSaturday = dayOfWeek === 6 ? 7 : (6 - dayOfWeek + 7) % 7;
+
   const nextSaturday = new Date(today);
   nextSaturday.setDate(today.getDate() + daysUntilSaturday);
-  return nextSaturday.toISOString().split("T")[0];
+  // Use local date formatting to avoid timezone issues
+  return formatDateLocal(nextSaturday);
 }
 
 // Format Saturday option for display

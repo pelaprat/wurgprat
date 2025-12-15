@@ -12,11 +12,16 @@ create extension if not exists "uuid-ossp";
 create table households (
   id uuid default uuid_generate_v4() primary key,
   name text not null,
+  timezone text default 'America/New_York',
   settings jsonb default '{}'::jsonb,
   created_at timestamptz default now() not null
 );
 
+comment on column households.timezone is 'IANA timezone identifier (e.g., America/Los_Angeles, Europe/London)';
 comment on column households.settings is 'Preferences: default_meal_time, week_start_day, calendar_id, departments[]';
+
+-- MIGRATION: If you have an existing database, run:
+-- ALTER TABLE households ADD COLUMN timezone text DEFAULT 'America/New_York';
 
 -- Users table (links Google accounts to households)
 create table users (

@@ -29,7 +29,7 @@ export async function GET() {
   // Get household settings and name
   const { data: household, error: householdError } = await supabase
     .from("households")
-    .select("name, settings")
+    .select("name, timezone, settings")
     .eq("id", user.household_id)
     .single();
 
@@ -42,6 +42,7 @@ export async function GET() {
 
   return NextResponse.json({
     name: household.name,
+    timezone: household.timezone || "America/New_York",
     settings: household.settings || {}
   });
 }
@@ -54,7 +55,7 @@ export async function PUT(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { cooked_recipes_sheet_url, wishlist_recipes_sheet_url, google_calendar_id } = body;
+  const { cooked_recipes_sheet_url, wishlist_recipes_sheet_url, google_calendar_id, timezone } = body;
 
   const supabase = getServiceSupabase();
 
@@ -87,10 +88,20 @@ export async function PUT(request: NextRequest) {
     google_calendar_id,
   };
 
+  // Build update object
+  const updateData: { settings: typeof updatedSettings; timezone?: string } = {
+    settings: updatedSettings,
+  };
+
+  // Only update timezone if provided
+  if (timezone) {
+    updateData.timezone = timezone;
+  }
+
   // Update household settings
   const { error: updateError } = await supabase
     .from("households")
-    .update({ settings: updatedSettings })
+    .update(updateData)
     .eq("id", user.household_id);
 
   if (updateError) {
@@ -100,5 +111,5 @@ export async function PUT(request: NextRequest) {
     );
   }
 
-  return NextResponse.json({ settings: updatedSettings });
+  return NextResponse.json({ settings: updatedSettings, timezone });
 }

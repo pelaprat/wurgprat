@@ -41,22 +41,25 @@ interface GroceryItemDraft {
   checked: boolean;
 }
 
-// Try to aggregate quantities with same unit
+// Try to aggregate quantities with same unit, accounting for recipe occurrences
 function aggregateQuantities(
-  items: { quantity: number | null; unit: string | null }[]
+  items: { quantity: number | null; unit: string | null; occurrences: number }[]
 ): { quantity: string; unit: string } {
   // Filter to items with quantities
   const withQty = items.filter((i) => i.quantity != null);
 
   if (withQty.length === 0) {
-    return { quantity: String(items.length), unit: "" };
+    // No quantities defined - count total occurrences
+    const totalOccurrences = items.reduce((sum, i) => sum + i.occurrences, 0);
+    return { quantity: String(totalOccurrences), unit: "" };
   }
 
-  // Group by unit
+  // Group by unit, multiplying by occurrences
   const byUnit: Record<string, number> = {};
   withQty.forEach((item) => {
     const unit = (item.unit || "").toLowerCase().trim();
-    byUnit[unit] = (byUnit[unit] || 0) + (item.quantity || 0);
+    const totalForItem = (item.quantity || 0) * item.occurrences;
+    byUnit[unit] = (byUnit[unit] || 0) + totalForItem;
   });
 
   // If all same unit, sum them
@@ -64,15 +67,15 @@ function aggregateQuantities(
   if (units.length === 1) {
     const unit = units[0];
     const total = byUnit[unit];
-    // Format nicely
-    const formatted = total % 1 === 0 ? String(total) : total.toFixed(2);
+    // Format nicely - round to 2 decimal places and remove trailing zeros
+    const formatted = total % 1 === 0 ? String(total) : parseFloat(total.toFixed(2)).toString();
     return { quantity: formatted, unit };
   }
 
   // Multiple units - just list them all
   const parts = units.map((unit) => {
     const qty = byUnit[unit];
-    const formatted = qty % 1 === 0 ? String(qty) : qty.toFixed(2);
+    const formatted = qty % 1 === 0 ? String(qty) : parseFloat(qty.toFixed(2)).toString();
     return `${formatted}${unit ? ` ${unit}` : ""}`;
   });
   return { quantity: parts.join(" + "), unit: "" };
@@ -106,12 +109,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No meals provided" }, { status: 400 });
   }
 
-  // Get recipe IDs that have actual recipes
-  const recipeIds = meals
-    .filter((m) => m.recipeId)
-    .map((m) => m.recipeId as string);
+  // Get recipe IDs that have actual recipes, counting occurrences for recipes used multiple times
+  const recipeOccurrences: Record<string, { count: number; name: string }> = {};
+  meals.forEach((meal) => {
+    if (meal.recipeId) {
+      if (!recipeOccurrences[meal.recipeId]) {
+        recipeOccurrences[meal.recipeId] = { count: 0, name: meal.recipeName };
+      }
+      recipeOccurrences[meal.recipeId].count++;
+    }
+  });
 
-  if (recipeIds.length === 0) {
+  const uniqueRecipeIds = Object.keys(recipeOccurrences);
+
+  if (uniqueRecipeIds.length === 0) {
     return NextResponse.json({ groceryItems: [] });
   }
 
@@ -130,7 +141,7 @@ export async function POST(request: NextRequest) {
         department
       )
     `)
-    .in("recipe_id", recipeIds);
+    .in("recipe_id", uniqueRecipeIds);
 
   if (ingredientsError) {
     console.error("Failed to fetch ingredients:", ingredientsError);
@@ -140,15 +151,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Create a map of recipe_id to recipe name
-  const recipeNameMap: Record<string, string> = {};
-  meals.forEach((meal) => {
-    if (meal.recipeId) {
-      recipeNameMap[meal.recipeId] = meal.recipeName;
-    }
-  });
-
-  // Group ingredients by ingredient_id
+  // Group ingredients by ingredient_id, multiplying quantities by recipe occurrence count
   const ingredientGroups: Record<
     string,
     {
@@ -160,6 +163,7 @@ export async function POST(request: NextRequest) {
         recipeName: string;
         quantity: number | null;
         unit: string | null;
+        occurrences: number;
       }[];
     }
   > = {};
@@ -173,6 +177,7 @@ export async function POST(request: NextRequest) {
     if (!ingredient) return;
 
     const ingredientId = ingredient.id;
+    const occurrences = recipeOccurrences[ri.recipe_id]?.count || 1;
 
     if (!ingredientGroups[ingredientId]) {
       ingredientGroups[ingredientId] = {
@@ -185,9 +190,10 @@ export async function POST(request: NextRequest) {
 
     ingredientGroups[ingredientId].items.push({
       recipeId: ri.recipe_id,
-      recipeName: recipeNameMap[ri.recipe_id] || "Unknown Recipe",
+      recipeName: recipeOccurrences[ri.recipe_id]?.name || "Unknown Recipe",
       quantity: ri.quantity,
       unit: ri.unit,
+      occurrences,
     });
   });
 
@@ -196,17 +202,25 @@ export async function POST(request: NextRequest) {
     (group) => {
       const aggregated = aggregateQuantities(group.items);
 
-      const recipeBreakdown: RecipeBreakdown[] = group.items.map((item) => ({
-        recipeId: item.recipeId,
-        recipeName: item.recipeName,
-        quantity:
-          item.quantity != null
-            ? item.quantity % 1 === 0
-              ? String(item.quantity)
-              : item.quantity.toFixed(2)
-            : "1",
-        unit: item.unit || "",
-      }));
+      const recipeBreakdown: RecipeBreakdown[] = group.items.map((item) => {
+        // Calculate the total quantity for this recipe (quantity × occurrences)
+        const totalQty = item.quantity != null ? item.quantity * item.occurrences : null;
+        const formattedQty = totalQty != null
+          ? (totalQty % 1 === 0 ? String(totalQty) : parseFloat(totalQty.toFixed(2)).toString())
+          : String(item.occurrences);
+
+        // Add occurrence indicator to recipe name if used multiple times
+        const recipeName = item.occurrences > 1
+          ? `${item.recipeName} (×${item.occurrences})`
+          : item.recipeName;
+
+        return {
+          recipeId: item.recipeId,
+          recipeName,
+          quantity: formattedQty,
+          unit: item.unit || "",
+        };
+      });
 
       return {
         id: `ing-${group.ingredientId}`,

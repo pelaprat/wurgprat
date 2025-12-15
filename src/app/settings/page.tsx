@@ -29,11 +29,46 @@ interface GoogleCalendar {
   backgroundColor?: string;
 }
 
+// Common timezones grouped by region
+const TIMEZONE_OPTIONS = [
+  { group: "US & Canada", timezones: [
+    { value: "America/New_York", label: "Eastern Time (ET)" },
+    { value: "America/Chicago", label: "Central Time (CT)" },
+    { value: "America/Denver", label: "Mountain Time (MT)" },
+    { value: "America/Phoenix", label: "Arizona (MST)" },
+    { value: "America/Los_Angeles", label: "Pacific Time (PT)" },
+    { value: "America/Anchorage", label: "Alaska Time" },
+    { value: "Pacific/Honolulu", label: "Hawaii Time" },
+  ]},
+  { group: "Europe", timezones: [
+    { value: "Europe/London", label: "London (GMT/BST)" },
+    { value: "Europe/Paris", label: "Paris (CET)" },
+    { value: "Europe/Berlin", label: "Berlin (CET)" },
+    { value: "Europe/Amsterdam", label: "Amsterdam (CET)" },
+    { value: "Europe/Rome", label: "Rome (CET)" },
+    { value: "Europe/Madrid", label: "Madrid (CET)" },
+  ]},
+  { group: "Asia & Pacific", timezones: [
+    { value: "Asia/Tokyo", label: "Tokyo (JST)" },
+    { value: "Asia/Shanghai", label: "Shanghai (CST)" },
+    { value: "Asia/Hong_Kong", label: "Hong Kong (HKT)" },
+    { value: "Asia/Singapore", label: "Singapore (SGT)" },
+    { value: "Asia/Seoul", label: "Seoul (KST)" },
+    { value: "Australia/Sydney", label: "Sydney (AEST)" },
+    { value: "Australia/Melbourne", label: "Melbourne (AEST)" },
+    { value: "Pacific/Auckland", label: "Auckland (NZST)" },
+  ]},
+  { group: "Other", timezones: [
+    { value: "UTC", label: "UTC" },
+  ]},
+];
+
 export default function SettingsPage() {
   const { data: session } = useSession();
   const [cookedRecipesUrl, setCookedRecipesUrl] = useState("");
   const [wishlistRecipesUrl, setWishlistRecipesUrl] = useState("");
   const [selectedCalendarId, setSelectedCalendarId] = useState("");
+  const [selectedTimezone, setSelectedTimezone] = useState("America/New_York");
   const [calendars, setCalendars] = useState<GoogleCalendar[]>([]);
   const [isLoadingCalendars, setIsLoadingCalendars] = useState(false);
   const [calendarsError, setCalendarsError] = useState<string | null>(null);
@@ -65,6 +100,7 @@ export default function SettingsPage() {
         setCookedRecipesUrl(data.settings?.cooked_recipes_sheet_url || "");
         setWishlistRecipesUrl(data.settings?.wishlist_recipes_sheet_url || "");
         setSelectedCalendarId(data.settings?.google_calendar_id || "");
+        setSelectedTimezone(data.timezone || "America/New_York");
       }
     } catch (error) {
       console.error("Failed to fetch settings:", error);
@@ -107,6 +143,7 @@ export default function SettingsPage() {
           cooked_recipes_sheet_url: cookedRecipesUrl,
           wishlist_recipes_sheet_url: wishlistRecipesUrl,
           google_calendar_id: selectedCalendarId,
+          timezone: selectedTimezone,
         }),
       });
 
@@ -510,6 +547,63 @@ export default function SettingsPage() {
               </p>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Section 3: Timezone Settings */}
+      <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
+        <div className="flex items-center mb-4">
+          <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center mr-3">
+            <svg
+              className="w-4 h-4 text-purple-600"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+          </div>
+          <h2 className="text-lg font-semibold text-gray-900">
+            Timezone
+          </h2>
+        </div>
+
+        <p className="text-gray-600 mb-6">
+          Set your household&apos;s timezone. This affects how dates and times are
+          displayed throughout the app.
+        </p>
+
+        <div>
+          <label
+            htmlFor="timezone"
+            className="block text-sm font-medium text-gray-700 mb-2"
+          >
+            Select Timezone
+          </label>
+          <select
+            id="timezone"
+            value={selectedTimezone}
+            onChange={(e) => setSelectedTimezone(e.target.value)}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
+          >
+            {TIMEZONE_OPTIONS.map((group) => (
+              <optgroup key={group.group} label={group.group}>
+                {group.timezones.map((tz) => (
+                  <option key={tz.value} value={tz.value}>
+                    {tz.label}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          <p className="mt-2 text-sm text-gray-500">
+            Currently set to: {TIMEZONE_OPTIONS.flatMap(g => g.timezones).find(t => t.value === selectedTimezone)?.label || selectedTimezone}
+          </p>
         </div>
       </div>
 

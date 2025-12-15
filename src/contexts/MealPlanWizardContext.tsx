@@ -35,6 +35,8 @@ export interface GroceryItemDraft {
   ingredientId?: string; // optional for manual adds
   ingredientName: string;
   department: string;
+  storeId?: string; // editable store assignment
+  storeName?: string; // for display
   totalQuantity: string;
   unit: string;
   recipeBreakdown: RecipeBreakdown[];

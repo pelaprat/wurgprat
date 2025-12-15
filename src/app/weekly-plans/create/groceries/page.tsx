@@ -25,6 +25,11 @@ const DEPARTMENT_ORDER = [
   "Other",
 ];
 
+interface Store {
+  id: string;
+  name: string;
+}
+
 interface EditingItem {
   id: string;
   field: "name" | "quantity";
@@ -38,10 +43,29 @@ export default function GroceriesPage() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+  const [stores, setStores] = useState<Store[]>([]);
   const [editingItem, setEditingItem] = useState<EditingItem | null>(null);
   const [newItemName, setNewItemName] = useState("");
   const [newItemDepartment, setNewItemDepartment] = useState("Pantry");
+  const [sortBy, setSortBy] = useState<"ingredient" | "department" | "store">("department");
+
+  // Fetch stores on mount
+  useEffect(() => {
+    const fetchStores = async () => {
+      try {
+        const response = await fetch("/api/stores");
+        if (response.ok) {
+          const data = await response.json();
+          setStores(data.stores || []);
+        }
+      } catch (err) {
+        console.error("Failed to fetch stores:", err);
+      }
+    };
+    if (session) {
+      fetchStores();
+    }
+  }, [session]);
 
   // Redirect if no meals proposed yet
   useEffect(() => {
@@ -85,49 +109,38 @@ export default function GroceriesPage() {
     }
   };
 
-  // Group items by department
-  const itemsByDepartment = useMemo(() => {
-    const grouped: Record<string, GroceryItemDraft[]> = {};
+  // Sorted grocery items
+  const sortedItems = useMemo(() => {
+    const items = [...wizard.groceryItems].filter((i) => !i.checked);
 
-    wizard.groceryItems.forEach((item) => {
-      const dept = item.department || "Other";
-      if (!grouped[dept]) {
-        grouped[dept] = [];
-      }
-      grouped[dept].push(item);
-    });
-
-    // Sort items within each department
-    Object.keys(grouped).forEach((dept) => {
-      grouped[dept].sort((a, b) => a.ingredientName.localeCompare(b.ingredientName));
-    });
-
-    return grouped;
-  }, [wizard.groceryItems]);
-
-  // Sort departments by predefined order
-  const sortedDepartments = useMemo(() => {
-    const depts = Object.keys(itemsByDepartment);
-    return depts.sort((a, b) => {
-      const aIndex = DEPARTMENT_ORDER.indexOf(a);
-      const bIndex = DEPARTMENT_ORDER.indexOf(b);
-      if (aIndex === -1 && bIndex === -1) return a.localeCompare(b);
-      if (aIndex === -1) return 1;
-      if (bIndex === -1) return -1;
-      return aIndex - bIndex;
-    });
-  }, [itemsByDepartment]);
-
-  // Toggle item expansion
-  const toggleExpanded = (id: string) => {
-    setExpandedItems((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
+    items.sort((a, b) => {
+      if (sortBy === "ingredient") {
+        return a.ingredientName.localeCompare(b.ingredientName);
+      } else if (sortBy === "store") {
+        const aStore = a.storeName || "No store";
+        const bStore = b.storeName || "No store";
+        if (aStore !== bStore) return aStore.localeCompare(bStore);
+        return a.ingredientName.localeCompare(b.ingredientName);
       } else {
-        next.add(id);
+        // Default: sort by department
+        const aIndex = DEPARTMENT_ORDER.indexOf(a.department || "Other");
+        const bIndex = DEPARTMENT_ORDER.indexOf(b.department || "Other");
+        const aDeptOrder = aIndex === -1 ? 999 : aIndex;
+        const bDeptOrder = bIndex === -1 ? 999 : bIndex;
+        if (aDeptOrder !== bDeptOrder) return aDeptOrder - bDeptOrder;
+        return a.ingredientName.localeCompare(b.ingredientName);
       }
-      return next;
+    });
+
+    return items;
+  }, [wizard.groceryItems, sortBy]);
+
+  // Handle store change
+  const handleStoreChange = (itemId: string, storeId: string) => {
+    const store = stores.find((s) => s.id === storeId);
+    wizard.updateGroceryItem(itemId, {
+      storeId: storeId || undefined,
+      storeName: store?.name || undefined,
     });
   };
 
@@ -336,154 +349,183 @@ export default function GroceriesPage() {
         </div>
       </div>
 
-      {/* Grocery items by department */}
-      <div className="space-y-6">
-        {sortedDepartments.map((department) => (
-          <div key={department} className="bg-white rounded-xl shadow-sm overflow-hidden">
-            <div className="px-4 py-3 bg-gray-50 border-b">
-              <div className="flex items-center justify-between">
-                <h3 className="font-medium text-gray-900">{department}</h3>
-                <span className="text-sm text-gray-500">
-                  {itemsByDepartment[department].filter((i) => !i.checked).length}{" "}
-                  items
-                </span>
-              </div>
-            </div>
-            <div className="divide-y divide-gray-100">
-              {itemsByDepartment[department].map((item) => {
-                const isExpanded = expandedItems.has(item.id);
+      {/* Grocery items table */}
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        {/* Sort controls */}
+        <div className="px-4 py-3 bg-gray-50 border-b flex items-center justify-between">
+          <span className="text-sm font-medium text-gray-700">Sort by:</span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setSortBy("department")}
+              className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                sortBy === "department"
+                  ? "bg-emerald-100 text-emerald-800"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              Department
+            </button>
+            <button
+              onClick={() => setSortBy("ingredient")}
+              className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                sortBy === "ingredient"
+                  ? "bg-emerald-100 text-emerald-800"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              Ingredient
+            </button>
+            <button
+              onClick={() => setSortBy("store")}
+              className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                sortBy === "store"
+                  ? "bg-emerald-100 text-emerald-800"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              Store
+            </button>
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b bg-gray-50">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  Ingredient
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  Amount
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  Recipes
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  Department
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  Store
+                </th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider w-16">
+
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {sortedItems.map((item) => {
                 const isEditing = editingItem?.id === item.id;
-                const hasBreakdown = item.recipeBreakdown.length > 1;
 
                 return (
-                  <div
-                    key={item.id}
-                    className={`p-4 ${item.checked ? "opacity-50 bg-gray-50" : ""}`}
-                  >
-                    <div className="flex items-start gap-3">
-                      {/* Checkbox */}
-                      <input
-                        type="checkbox"
-                        checked={item.checked}
-                        onChange={() => wizard.toggleGroceryItemChecked(item.id)}
-                        className="mt-1 h-4 w-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
-                      />
-
-                      {/* Item content */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          {/* Name */}
-                          {isEditing && editingItem.field === "name" ? (
-                            <input
-                              type="text"
-                              value={editingItem.value}
-                              onChange={(e) =>
-                                setEditingItem({
-                                  ...editingItem,
-                                  value: e.target.value,
-                                })
-                              }
-                              onBlur={handleEditSave}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") handleEditSave();
-                                if (e.key === "Escape") handleEditCancel();
-                              }}
-                              autoFocus
-                              className="px-2 py-1 border border-emerald-500 rounded text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                            />
-                          ) : (
-                            <span
-                              className={`font-medium text-gray-900 ${item.checked ? "line-through" : ""} cursor-pointer hover:text-emerald-600`}
-                              onClick={() => handleEdit(item, "name")}
-                            >
-                              {item.ingredientName}
-                            </span>
-                          )}
-
-                          {/* Quantity */}
-                          {isEditing && editingItem.field === "quantity" ? (
-                            <input
-                              type="text"
-                              value={editingItem.value}
-                              onChange={(e) =>
-                                setEditingItem({
-                                  ...editingItem,
-                                  value: e.target.value,
-                                })
-                              }
-                              onBlur={handleEditSave}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") handleEditSave();
-                                if (e.key === "Escape") handleEditCancel();
-                              }}
-                              autoFocus
-                              className="w-20 px-2 py-1 border border-emerald-500 rounded text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                            />
-                          ) : (
-                            <span
-                              className="text-sm text-gray-500 cursor-pointer hover:text-emerald-600"
-                              onClick={() => handleEdit(item, "quantity")}
-                            >
-                              {item.totalQuantity}
-                              {item.unit ? ` ${item.unit}` : ""}
-                            </span>
-                          )}
-
-                          {/* Manual add badge */}
+                  <tr key={item.id} className="hover:bg-gray-50">
+                    {/* Ingredient name */}
+                    <td className="px-4 py-3">
+                      {isEditing && editingItem.field === "name" ? (
+                        <input
+                          type="text"
+                          value={editingItem.value}
+                          onChange={(e) =>
+                            setEditingItem({
+                              ...editingItem,
+                              value: e.target.value,
+                            })
+                          }
+                          onBlur={handleEditSave}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleEditSave();
+                            if (e.key === "Escape") handleEditCancel();
+                          }}
+                          autoFocus
+                          className="px-2 py-1 border border-emerald-500 rounded text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent w-full"
+                        />
+                      ) : (
+                        <span
+                          className="font-medium text-gray-900 cursor-pointer hover:text-emerald-600"
+                          onClick={() => handleEdit(item, "name")}
+                        >
+                          {item.ingredientName}
                           {item.isManualAdd && (
-                            <span className="text-xs px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded">
+                            <span className="ml-2 text-xs px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded">
                               Added
                             </span>
                           )}
-                        </div>
+                        </span>
+                      )}
+                    </td>
 
-                        {/* Recipe breakdown toggle */}
-                        {hasBreakdown && (
-                          <button
-                            onClick={() => toggleExpanded(item.id)}
-                            className="mt-1 text-xs text-gray-500 hover:text-emerald-600 flex items-center gap-1"
-                          >
-                            <svg
-                              className={`w-3 h-3 transition-transform ${isExpanded ? "rotate-90" : ""}`}
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M9 5l7 7-7 7"
-                              />
-                            </svg>
-                            Used in {item.recipeBreakdown.length} recipes
-                          </button>
-                        )}
+                    {/* Amount */}
+                    <td className="px-4 py-3">
+                      {isEditing && editingItem.field === "quantity" ? (
+                        <input
+                          type="text"
+                          value={editingItem.value}
+                          onChange={(e) =>
+                            setEditingItem({
+                              ...editingItem,
+                              value: e.target.value,
+                            })
+                          }
+                          onBlur={handleEditSave}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleEditSave();
+                            if (e.key === "Escape") handleEditCancel();
+                          }}
+                          autoFocus
+                          className="w-20 px-2 py-1 border border-emerald-500 rounded text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                        />
+                      ) : (
+                        <span
+                          className="text-sm text-gray-700 cursor-pointer hover:text-emerald-600"
+                          onClick={() => handleEdit(item, "quantity")}
+                        >
+                          {item.totalQuantity}
+                          {item.unit ? ` ${item.unit}` : ""}
+                        </span>
+                      )}
+                    </td>
 
-                        {/* Expanded breakdown */}
-                        {isExpanded && (
-                          <div className="mt-2 pl-4 border-l-2 border-gray-200 space-y-1">
-                            {item.recipeBreakdown.map((breakdown, idx) => (
-                              <div key={idx} className="text-xs text-gray-500">
-                                {breakdown.quantity}
-                                {breakdown.unit ? ` ${breakdown.unit}` : ""} for{" "}
-                                <span className="text-gray-700">
-                                  {breakdown.recipeName}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Single recipe reference */}
-                        {!hasBreakdown && item.recipeBreakdown.length === 1 && (
-                          <div className="mt-1 text-xs text-gray-400">
-                            for {item.recipeBreakdown[0].recipeName}
-                          </div>
+                    {/* Recipes */}
+                    <td className="px-4 py-3">
+                      <div className="text-sm text-gray-600">
+                        {item.recipeBreakdown.length > 0 ? (
+                          item.recipeBreakdown.map((breakdown, idx) => (
+                            <span key={idx}>
+                              {idx > 0 && ", "}
+                              {breakdown.recipeName}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-gray-400">-</span>
                         )}
                       </div>
+                    </td>
 
-                      {/* Remove button */}
+                    {/* Department */}
+                    <td className="px-4 py-3">
+                      <span className="text-sm text-gray-600">
+                        {item.department || "Other"}
+                      </span>
+                    </td>
+
+                    {/* Store */}
+                    <td className="px-4 py-3">
+                      <select
+                        value={item.storeId || ""}
+                        onChange={(e) => handleStoreChange(item.id, e.target.value)}
+                        className="text-sm border border-gray-200 rounded px-2 py-1 focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
+                      >
+                        <option value="">No store</option>
+                        {stores.map((store) => (
+                          <option key={store.id} value={store.id}>
+                            {store.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+
+                    {/* Remove */}
+                    <td className="px-4 py-3 text-center">
                       <button
                         onClick={() => wizard.removeGroceryItem(item.id)}
                         className="p-1 text-gray-400 hover:text-red-600 transition-colors"
@@ -503,13 +545,13 @@ export default function GroceriesPage() {
                           />
                         </svg>
                       </button>
-                    </div>
-                  </div>
+                    </td>
+                  </tr>
                 );
               })}
-            </div>
-          </div>
-        ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Empty state */}

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useSession } from "next-auth/react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 interface Recipe {
@@ -18,8 +18,24 @@ interface Meal {
   meal_type: string;
   custom_meal_name?: string;
   is_leftover: boolean;
+  is_ai_suggested?: boolean;
   notes?: string;
-  recipe?: Recipe;
+  recipes?: Recipe;
+}
+
+interface Ingredient {
+  id: string;
+  name: string;
+  department?: string;
+  store_id?: string;
+  store_name?: string;
+}
+
+interface RecipeBreakdown {
+  recipe_id: string;
+  recipe_name: string;
+  quantity: number | null;
+  unit: string | null;
 }
 
 interface GroceryItem {
@@ -27,11 +43,8 @@ interface GroceryItem {
   quantity?: number;
   unit?: string;
   checked: boolean;
-  ingredient: {
-    id: string;
-    name: string;
-    department?: string;
-  };
+  ingredients: Ingredient | null;
+  recipe_breakdown?: RecipeBreakdown[];
 }
 
 interface GroceryList {
@@ -51,13 +64,20 @@ interface WeeklyPlan {
 
 const DAY_NAMES = ["Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
+type TabType = "dinner" | "grocery";
+
 export default function WeeklyPlanDetailPage() {
   const { data: session } = useSession();
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [weeklyPlan, setWeeklyPlan] = useState<WeeklyPlan | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const tabParam = searchParams.get("tab");
+  const initialTab: TabType = tabParam === "dinner" ? "dinner" : "grocery";
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
+  const [updatingItems, setUpdatingItems] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const fetchWeeklyPlan = async () => {
@@ -100,8 +120,78 @@ export default function WeeklyPlanDetailPage() {
     }
   };
 
+  const handleToggleGroceryItem = async (itemId: string, currentChecked: boolean) => {
+    if (updatingItems.has(itemId)) return;
+
+    setUpdatingItems((prev) => new Set(prev).add(itemId));
+
+    // Optimistically update the UI
+    setWeeklyPlan((prev) => {
+      if (!prev || !prev.grocery_list?.[0]) return prev;
+      return {
+        ...prev,
+        grocery_list: [
+          {
+            ...prev.grocery_list[0],
+            grocery_items: prev.grocery_list[0].grocery_items.map((item) =>
+              item.id === itemId ? { ...item, checked: !currentChecked } : item
+            ),
+          },
+        ],
+      };
+    });
+
+    try {
+      const response = await fetch(`/api/grocery-items/${itemId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ checked: !currentChecked }),
+      });
+
+      if (!response.ok) {
+        // Revert on error
+        setWeeklyPlan((prev) => {
+          if (!prev || !prev.grocery_list?.[0]) return prev;
+          return {
+            ...prev,
+            grocery_list: [
+              {
+                ...prev.grocery_list[0],
+                grocery_items: prev.grocery_list[0].grocery_items.map((item) =>
+                  item.id === itemId ? { ...item, checked: currentChecked } : item
+                ),
+              },
+            ],
+          };
+        });
+      }
+    } catch {
+      // Revert on error
+      setWeeklyPlan((prev) => {
+        if (!prev || !prev.grocery_list?.[0]) return prev;
+        return {
+          ...prev,
+          grocery_list: [
+            {
+              ...prev.grocery_list[0],
+              grocery_items: prev.grocery_list[0].grocery_items.map((item) =>
+                item.id === itemId ? { ...item, checked: currentChecked } : item
+              ),
+            },
+          ],
+        };
+      });
+    } finally {
+      setUpdatingItems((prev) => {
+        const next = new Set(prev);
+        next.delete(itemId);
+        return next;
+      });
+    }
+  };
+
   const formatWeekOf = (dateStr: string) => {
-    const date = new Date(dateStr);
+    const date = new Date(dateStr + "T00:00:00");
     const endDate = new Date(date);
     endDate.setDate(date.getDate() + 6);
 
@@ -115,19 +205,56 @@ export default function WeeklyPlanDetailPage() {
     })}`;
   };
 
-  const getMealForDay = (day: number, mealType: string = "dinner") => {
-    return weeklyPlan?.meals.find(
+  const getMealsForDay = (day: number, mealType: string = "dinner") => {
+    return weeklyPlan?.meals.filter(
       (m) => m.day === day && m.meal_type === mealType
-    );
+    ) || [];
   };
 
   const getDateForDay = (dayIndex: number) => {
     if (!weeklyPlan) return "";
-    const weekOf = new Date(weeklyPlan.week_of);
+    const weekOf = new Date(weeklyPlan.week_of + "T00:00:00");
     const date = new Date(weekOf);
     date.setDate(weekOf.getDate() + dayIndex);
     return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
   };
+
+  const groceryList = weeklyPlan?.grocery_list?.[0];
+
+  // Group grocery items by store
+  const groceryItemsByStore = useMemo(() => {
+    if (!groceryList?.grocery_items) return new Map<string, GroceryItem[]>();
+
+    const grouped = new Map<string, GroceryItem[]>();
+    groceryList.grocery_items.forEach((item) => {
+      const store = item.ingredients?.store_name || "No Store Assigned";
+      if (!grouped.has(store)) {
+        grouped.set(store, []);
+      }
+      grouped.get(store)!.push(item);
+    });
+
+    // Sort items within each store by name
+    grouped.forEach((items) => {
+      items.sort((a, b) => {
+        const nameA = a.ingredients?.name || "";
+        const nameB = b.ingredients?.name || "";
+        return nameA.localeCompare(nameB);
+      });
+    });
+
+    // Sort stores alphabetically, but put "No Store Assigned" at the end
+    const sortedEntries = Array.from(grouped.entries()).sort((a, b) => {
+      if (a[0] === "No Store Assigned") return 1;
+      if (b[0] === "No Store Assigned") return -1;
+      return a[0].localeCompare(b[0]);
+    });
+
+    return new Map(sortedEntries);
+  }, [groceryList?.grocery_items]);
+
+  const checkedCount = groceryList?.grocery_items.filter((i) => i.checked).length || 0;
+  const totalCount = groceryList?.grocery_items.length || 0;
 
   if (!session) {
     return (
@@ -161,74 +288,217 @@ export default function WeeklyPlanDetailPage() {
     );
   }
 
-  const groceryList = weeklyPlan.grocery_list?.[0];
-
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="max-w-4xl mx-auto">
       {/* Header */}
-      <div className="mb-6">
+      <div className="mb-4">
         <Link
           href="/weekly-plans"
-          className="text-sm text-gray-500 hover:text-gray-700 mb-2 inline-block"
+          className="text-sm text-gray-500 hover:text-gray-700 mb-1 inline-block"
         >
           &larr; Back to weekly plans
         </Link>
-        <h1 className="text-2xl font-bold text-gray-900">
-          Week of {formatWeekOf(weeklyPlan.week_of)}
-        </h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-bold text-gray-900">
+            Week of {formatWeekOf(weeklyPlan.week_of)}
+          </h1>
+          <button
+            onClick={handleDelete}
+            className="px-2 py-1 text-xs text-red-600 border border-red-300 rounded hover:bg-red-50 transition-colors"
+          >
+            Delete
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Content - Meal Schedule */}
-        <div className="lg:col-span-2">
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+      {/* Tabs */}
+      <div className="border-b border-gray-200 mb-4">
+        <nav className="-mb-px flex space-x-6">
+          <button
+            onClick={() => setActiveTab("grocery")}
+            className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors flex items-center gap-2 ${
+              activeTab === "grocery"
+                ? "border-emerald-500 text-emerald-600"
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+            }`}
+          >
+            Grocery List
+            {totalCount > 0 && (
+              <span className={`px-1.5 py-0.5 text-xs rounded-full ${
+                checkedCount === totalCount
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "bg-gray-100 text-gray-600"
+              }`}>
+                {checkedCount}/{totalCount}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab("dinner")}
+            className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+              activeTab === "dinner"
+                ? "border-emerald-500 text-emerald-600"
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+            }`}
+          >
+            Dinner Plan
+          </button>
+        </nav>
+      </div>
+
+      {/* Tab Content */}
+      {activeTab === "grocery" ? (
+        <div className="space-y-3">
+          {/* Grocery List */}
+          {!groceryList || groceryList.grocery_items.length === 0 ? (
+            <div className="bg-white rounded-lg shadow-sm p-8 text-center">
+              <p className="text-gray-500">No grocery list for this week.</p>
+            </div>
+          ) : (
+            <>
+              {/* Compact Progress bar */}
+              <div className="flex items-center gap-3 px-1">
+                <div className="flex-1 bg-gray-200 rounded-full h-2">
+                  <div
+                    className="bg-emerald-600 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${totalCount > 0 ? (checkedCount / totalCount) * 100 : 0}%` }}
+                  ></div>
+                </div>
+                <span className="text-sm text-gray-500 whitespace-nowrap">
+                  {checkedCount}/{totalCount}
+                </span>
+              </div>
+
+              {/* Items grouped by store */}
+              <div className="space-y-3">
+                {Array.from(groceryItemsByStore.entries()).map(([store, items]) => {
+                  const storeCheckedCount = items.filter(i => i.checked).length;
+                  const allChecked = storeCheckedCount === items.length;
+
+                  return (
+                    <div key={store} className="bg-white rounded-lg shadow-sm overflow-hidden">
+                      <div className={`px-3 py-2 border-b flex items-center justify-between ${allChecked ? 'bg-emerald-50' : 'bg-gray-50'}`}>
+                        <h3 className={`font-medium text-sm ${allChecked ? 'text-emerald-700' : 'text-gray-900'}`}>
+                          {store}
+                        </h3>
+                        <span className={`text-xs ${allChecked ? 'text-emerald-600' : 'text-gray-500'}`}>
+                          {storeCheckedCount}/{items.length}
+                        </span>
+                      </div>
+                      <div className="divide-y divide-gray-100">
+                        {items.map((item) => (
+                          <div
+                            key={item.id}
+                            className={`px-3 py-2 ${updatingItems.has(item.id) ? "opacity-50" : ""}`}
+                          >
+                            <label className="flex items-start cursor-pointer hover:bg-gray-50 transition-colors -mx-3 px-3 py-1">
+                              <input
+                                type="checkbox"
+                                checked={item.checked}
+                                onChange={() => handleToggleGroceryItem(item.id, item.checked)}
+                                disabled={updatingItems.has(item.id)}
+                                className="h-4 w-4 mt-0.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer flex-shrink-0"
+                              />
+                              <div className="ml-2 flex-1 min-w-0">
+                                <div className="flex items-center justify-between">
+                                  <span
+                                    className={`text-sm font-medium ${
+                                      item.checked ? "text-gray-400 line-through" : "text-gray-900"
+                                    }`}
+                                  >
+                                    {item.ingredients?.name || "Unknown item"}
+                                  </span>
+                                  {item.quantity && (
+                                    <span className={`text-xs ml-2 ${item.checked ? "text-gray-400" : "text-gray-500"}`}>
+                                      {item.quantity}{item.unit ? ` ${item.unit}` : ""}
+                                    </span>
+                                  )}
+                                </div>
+                                {item.recipe_breakdown && item.recipe_breakdown.length > 0 && (
+                                  <div className={`mt-1 text-xs ${item.checked ? "text-gray-400" : "text-gray-500"}`}>
+                                    {item.recipe_breakdown.map((rb, idx) => (
+                                      <div key={idx} className="flex justify-between">
+                                        <span className="truncate mr-2">{rb.recipe_name}</span>
+                                        <span className="whitespace-nowrap">
+                                          {rb.quantity ?? "—"}{rb.unit ? ` ${rb.unit}` : ""}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Completion message */}
+              {checkedCount === totalCount && totalCount > 0 && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center">
+                  <p className="text-emerald-800 text-sm font-medium">
+                    All done!
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {/* Dinner Schedule */}
+          <div className="bg-white rounded-lg shadow-sm p-4">
+            <h2 className="text-base font-semibold text-gray-900 mb-3">
               Dinner Schedule
             </h2>
-            <div className="space-y-3">
+            <div className="space-y-2">
               {DAY_NAMES.map((dayName, index) => {
-                const meal = getMealForDay(index + 1);
+                const meals = getMealsForDay(index + 1);
                 return (
                   <div
                     key={index}
-                    className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0"
+                    className="flex items-start py-2 border-b border-gray-100 last:border-0"
                   >
-                    <div className="flex items-center space-x-4">
-                      <div className="w-24">
-                        <span className="font-medium text-gray-900">
-                          {dayName}
-                        </span>
-                        <span className="text-xs text-gray-500 block">
-                          {getDateForDay(index)}
-                        </span>
-                      </div>
-                      <div>
-                        {meal?.recipe ? (
-                          <Link
-                            href={`/recipes/${meal.recipe.id}`}
-                            className="text-emerald-600 hover:text-emerald-700"
-                          >
-                            {meal.recipe.name}
-                          </Link>
-                        ) : meal?.custom_meal_name ? (
-                          <span className="text-gray-700">
-                            {meal.custom_meal_name}
-                          </span>
-                        ) : (
-                          <span className="text-gray-400 italic">No meal planned</span>
-                        )}
-                        {meal?.is_leftover && (
-                          <span className="ml-2 px-2 py-0.5 text-xs bg-amber-100 text-amber-800 rounded">
-                            Leftovers
-                          </span>
-                        )}
-                      </div>
+                    <div className="w-20 flex-shrink-0">
+                      <span className="font-medium text-sm text-gray-900">
+                        {dayName}
+                      </span>
+                      <span className="text-xs text-gray-500 block">
+                        {getDateForDay(index)}
+                      </span>
                     </div>
-                    {meal?.recipe?.time_rating && (
-                      <div className="text-sm text-gray-500">
-                        {meal.recipe.time_rating <= 2 ? "Quick" : meal.recipe.time_rating >= 4 ? "Long" : "Medium"}
-                      </div>
-                    )}
+                    <div className="flex-1 space-y-1">
+                      {meals.length > 0 ? (
+                        meals.map((meal) => (
+                          <div key={meal.id} className="flex items-center gap-2">
+                            {meal.recipes ? (
+                              <Link
+                                href={`/recipes/${meal.recipes.id}`}
+                                className="text-sm text-emerald-600 hover:text-emerald-700"
+                              >
+                                {meal.recipes.name}
+                              </Link>
+                            ) : meal.custom_meal_name ? (
+                              <span className="text-sm text-gray-700">
+                                {meal.custom_meal_name}
+                              </span>
+                            ) : (
+                              <span className="text-sm text-gray-400 italic">No meal</span>
+                            )}
+                            {meal.is_leftover && (
+                              <span className="px-1.5 py-0.5 text-xs bg-amber-100 text-amber-800 rounded">
+                                Leftovers
+                              </span>
+                            )}
+                          </div>
+                        ))
+                      ) : (
+                        <span className="text-sm text-gray-400 italic">No meal</span>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -237,82 +507,20 @@ export default function WeeklyPlanDetailPage() {
 
           {/* Notes */}
           {weeklyPlan.notes && (
-            <div className="bg-white rounded-xl shadow-sm p-6 mt-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-3">Notes</h2>
-              <p className="text-gray-600 whitespace-pre-wrap">
+            <div className="bg-white rounded-lg shadow-sm p-4">
+              <h2 className="text-base font-semibold text-gray-900 mb-2">Notes</h2>
+              <p className="text-sm text-gray-600 whitespace-pre-wrap">
                 {weeklyPlan.notes}
               </p>
             </div>
           )}
-        </div>
-
-        {/* Sidebar */}
-        <div className="space-y-6">
-          {/* Grocery List Summary */}
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              Grocery List
-            </h2>
-            {groceryList && groceryList.grocery_items.length > 0 ? (
-              <>
-                <p className="text-sm text-gray-600 mb-3">
-                  {groceryList.grocery_items.filter((i) => i.checked).length} of{" "}
-                  {groceryList.grocery_items.length} items checked
-                </p>
-                <ul className="space-y-1 max-h-48 overflow-y-auto">
-                  {groceryList.grocery_items.slice(0, 10).map((item) => (
-                    <li
-                      key={item.id}
-                      className={`text-sm ${
-                        item.checked ? "text-gray-400 line-through" : "text-gray-700"
-                      }`}
-                    >
-                      {item.ingredient.name}
-                    </li>
-                  ))}
-                  {groceryList.grocery_items.length > 10 && (
-                    <li className="text-sm text-gray-500">
-                      + {groceryList.grocery_items.length - 10} more items
-                    </li>
-                  )}
-                </ul>
-                <Link
-                  href="/groceries"
-                  className="text-sm text-emerald-600 hover:text-emerald-700 mt-3 inline-block"
-                >
-                  View full list &rarr;
-                </Link>
-              </>
-            ) : (
-              <p className="text-gray-500 text-sm">No grocery list yet.</p>
-            )}
-          </div>
-
-          {/* Actions */}
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-3">Actions</h2>
-            <div className="space-y-2">
-              <Link
-                href="/meals"
-                className="w-full block text-center px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
-              >
-                Edit Meals
-              </Link>
-              <button
-                onClick={handleDelete}
-                className="w-full px-4 py-2 text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition-colors"
-              >
-                Delete Plan
-              </button>
-            </div>
-          </div>
 
           {/* Metadata */}
-          <div className="text-xs text-gray-400 px-2">
+          <div className="text-xs text-gray-400">
             <p>Created: {new Date(weeklyPlan.created_at).toLocaleString()}</p>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -7,10 +7,10 @@ import { useState, useRef, useEffect } from "react";
 import { useHousehold } from "@/contexts/HouseholdContext";
 
 const navLinks = [
+  { href: "/weekly-plans", label: "Weekly Plans" },
   { href: "/recipes", label: "Recipes" },
-  { href: "/ingredients", label: "Ingredients" },
   { href: "/events", label: "Events" },
-  { href: "/weekly-plans", label: "Plans" },
+  { href: "/ingredients", label: "Ingredients" },
   { href: "/stores", label: "Stores" },
 ];
 

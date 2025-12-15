@@ -4,9 +4,19 @@ import { useState, useEffect, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useMealPlanWizard } from "@/contexts/MealPlanWizardContext";
+import { useMealPlanWizard, ProposedMeal } from "@/contexts/MealPlanWizardContext";
 
 const DAY_NAMES = [
+  "Sat",
+  "Sun",
+  "Mon",
+  "Tue",
+  "Wed",
+  "Thu",
+  "Fri",
+];
+
+const DAY_NAMES_FULL = [
   "Saturday",
   "Sunday",
   "Monday",
@@ -22,6 +32,14 @@ const TIME_RATING_LABELS: Record<number, string> = {
   3: "Medium",
   4: "Long",
   5: "Very Long",
+};
+
+const TIME_RATING_COLORS: Record<number, string> = {
+  1: "bg-green-100 text-green-800",
+  2: "bg-green-100 text-green-800",
+  3: "bg-yellow-100 text-yellow-800",
+  4: "bg-red-100 text-red-800",
+  5: "bg-red-100 text-red-800",
 };
 
 export default function FinalizePage() {
@@ -41,19 +59,39 @@ export default function FinalizePage() {
     }
   }, [wizard.proposedMeals, router]);
 
-  // Count groceries by department
-  const groceriesByDepartment = useMemo(() => {
-    const counts: Record<string, number> = {};
-    wizard.groceryItems
-      .filter((item) => !item.checked)
-      .forEach((item) => {
-        const dept = item.department || "Other";
-        counts[dept] = (counts[dept] || 0) + 1;
-      });
-    return counts;
+  // Get meals organized by day
+  const getMealsForDay = (day: number): ProposedMeal[] => {
+    return wizard.proposedMeals
+      .filter((m) => m.day === day)
+      .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  };
+
+  // Get dates for the week
+  const getWeekDates = (): string[] => {
+    if (!wizard.weekOf) return [];
+    const start = new Date(wizard.weekOf + "T00:00:00");
+    const dates: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(start);
+      date.setDate(start.getDate() + i);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      dates.push(`${year}-${month}-${day}`);
+    }
+    return dates;
+  };
+
+  const weekDates = getWeekDates();
+
+  // Sorted grocery items (unchecked only)
+  const sortedGroceryItems = useMemo(() => {
+    return wizard.groceryItems
+      .filter((i) => !i.checked)
+      .sort((a, b) => a.ingredientName.localeCompare(b.ingredientName));
   }, [wizard.groceryItems]);
 
-  const totalGroceryItems = wizard.groceryItems.filter((i) => !i.checked).length;
+  const totalGroceryItems = sortedGroceryItems.length;
 
   // Handle final submission
   const handleSubmit = async () => {
@@ -83,6 +121,9 @@ export default function FinalizePage() {
 
       // Reset wizard after successful creation
       wizard.resetWizard();
+
+      // Redirect to home page with notification
+      router.push("/?notification=weekly-plan-created");
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
@@ -99,8 +140,8 @@ export default function FinalizePage() {
     );
   }
 
-  // Success state
-  if (success && createdPlanId) {
+  // Success state - shown briefly before redirect or as fallback
+  if (success) {
     return (
       <div className="max-w-2xl mx-auto text-center py-12">
         <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -121,28 +162,16 @@ export default function FinalizePage() {
         <h1 className="text-2xl font-bold text-gray-900 mb-2">
           Weekly Plan Created!
         </h1>
-        <p className="text-gray-600 mb-8">
-          Your meal plan and grocery list have been saved.
-        </p>
-        <div className="flex justify-center gap-4">
-          <Link
-            href={`/weekly-plans/${createdPlanId}`}
-            className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
-          >
-            View Weekly Plan
-          </Link>
-          <Link
-            href="/weekly-plans"
-            className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            Back to All Plans
-          </Link>
-        </div>
+        <p className="text-gray-600 mb-4">Redirecting...</p>
+        <Link
+          href="/"
+          className="text-emerald-600 hover:text-emerald-700"
+        >
+          Go to Home
+        </Link>
       </div>
     );
   }
-
-  const sortedMeals = [...wizard.proposedMeals].sort((a, b) => a.day - b.day);
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -248,85 +277,147 @@ export default function FinalizePage() {
               })}
             </h2>
             <p className="text-sm text-emerald-700">
-              {sortedMeals.length} dinners planned, {totalGroceryItems} grocery
+              {wizard.proposedMeals.length} dinners planned, {totalGroceryItems} grocery
               items
             </p>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Meals summary */}
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <div className="px-4 py-3 bg-gray-50 border-b">
-            <h3 className="font-semibold text-gray-900">Dinner Schedule</h3>
-          </div>
-          <div className="divide-y divide-gray-100">
-            {sortedMeals.map((meal) => (
-              <div key={meal.day} className="px-4 py-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-sm font-medium text-gray-900">
-                      {DAY_NAMES[meal.day - 1]}
-                    </span>
-                    <span className="text-sm text-gray-500 ml-2">
-                      {new Date(meal.date + "T00:00:00").toLocaleDateString(
-                        "en-US",
-                        { month: "short", day: "numeric" }
-                      )}
-                    </span>
-                  </div>
-                  {meal.recipeTimeRating && (
-                    <span
-                      className={`text-xs px-1.5 py-0.5 rounded ${
-                        meal.recipeTimeRating <= 2
-                          ? "bg-green-100 text-green-800"
-                          : meal.recipeTimeRating === 3
-                            ? "bg-yellow-100 text-yellow-800"
-                            : "bg-red-100 text-red-800"
-                      }`}
-                    >
-                      {TIME_RATING_LABELS[meal.recipeTimeRating]}
-                    </span>
-                  )}
-                </div>
-                <p className="text-gray-700 mt-1">{meal.recipeName}</p>
-              </div>
-            ))}
-          </div>
+      {/* Horizontal Calendar View for Dinners */}
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-6">
+        <div className="px-4 py-3 bg-gray-50 border-b">
+          <h3 className="font-semibold text-gray-900">Dinner Schedule</h3>
         </div>
+        <div className="overflow-x-auto">
+          <div className="grid grid-cols-7 min-w-[700px]">
+            {weekDates.map((date, index) => {
+              const day = index + 1;
+              const meals = getMealsForDay(day);
+              const dateObj = new Date(date + "T00:00:00");
 
-        {/* Groceries summary */}
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <div className="px-4 py-3 bg-gray-50 border-b">
-            <h3 className="font-semibold text-gray-900">Grocery Summary</h3>
-          </div>
-          <div className="p-4">
-            {totalGroceryItems === 0 ? (
-              <p className="text-gray-500 text-sm">No grocery items</p>
-            ) : (
-              <div className="space-y-2">
-                {Object.entries(groceriesByDepartment)
-                  .sort(([a], [b]) => a.localeCompare(b))
-                  .map(([dept, count]) => (
-                    <div
-                      key={dept}
-                      className="flex items-center justify-between text-sm"
-                    >
-                      <span className="text-gray-700">{dept}</span>
-                      <span className="text-gray-500">
-                        {count} item{count !== 1 ? "s" : ""}
-                      </span>
+              return (
+                <div
+                  key={day}
+                  className={`border-r last:border-r-0 ${index === 0 ? "" : ""}`}
+                >
+                  {/* Day header */}
+                  <div className="px-2 py-2 bg-gray-50 border-b text-center">
+                    <div className="font-medium text-gray-900 text-sm">
+                      {DAY_NAMES[index]}
                     </div>
-                  ))}
-                <div className="pt-2 mt-2 border-t flex items-center justify-between font-medium">
-                  <span className="text-gray-900">Total</span>
-                  <span className="text-gray-900">{totalGroceryItems} items</span>
+                    <div className="text-xs text-gray-500">
+                      {dateObj.toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Meals for this day */}
+                  <div className="p-2 min-h-[120px] space-y-2">
+                    {meals.length > 0 ? (
+                      meals.map((meal) => (
+                        <div
+                          key={meal.mealId}
+                          className="p-2 bg-emerald-50 border border-emerald-100 rounded-lg"
+                        >
+                          <div className="text-sm font-medium text-gray-900 line-clamp-2">
+                            {meal.recipeName}
+                          </div>
+                          {meal.recipeTimeRating && (
+                            <div className="mt-1">
+                              <span
+                                className={`text-xs px-1.5 py-0.5 rounded ${TIME_RATING_COLORS[meal.recipeTimeRating]}`}
+                              >
+                                {TIME_RATING_LABELS[meal.recipeTimeRating]}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-xs text-gray-400 text-center py-4">
+                        No dinner
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })}
           </div>
         </div>
+      </div>
+
+      {/* Grocery List Table */}
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div className="px-4 py-3 bg-gray-50 border-b flex items-center justify-between">
+          <h3 className="font-semibold text-gray-900">Grocery List</h3>
+          <span className="text-sm text-gray-500">{totalGroceryItems} items</span>
+        </div>
+        {totalGroceryItems === 0 ? (
+          <div className="p-8 text-center text-gray-500">
+            No grocery items
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b bg-gray-50">
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    Ingredient
+                  </th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    Amount
+                  </th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    Recipes
+                  </th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    Department
+                  </th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    Store
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {sortedGroceryItems.map((item) => (
+                  <tr key={item.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-2">
+                      <span className="font-medium text-gray-900 text-sm">
+                        {item.ingredientName}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className="text-sm text-gray-700">
+                        {item.totalQuantity}
+                        {item.unit ? ` ${item.unit}` : ""}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className="text-sm text-gray-600">
+                        {item.recipeBreakdown.length > 0
+                          ? item.recipeBreakdown.map((b) => b.recipeName).join(", ")
+                          : "-"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className="text-sm text-gray-600">
+                        {item.department || "Other"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className="text-sm text-gray-600">
+                        {item.storeName || "-"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Error message */}
