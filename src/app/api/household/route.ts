@@ -23,14 +23,30 @@ export async function POST(request: NextRequest) {
   const supabase = getServiceSupabase();
 
   // Check if user already has a household
-  const { data: user } = await supabase
+  let { data: user } = await supabase
     .from("users")
     .select("id, household_id")
     .eq("email", session.user.email)
     .single();
 
+  // If user doesn't exist, create them (fallback for race condition or failed signIn callback)
   if (!user) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
+    console.log("User not found, creating user for:", session.user.email);
+    const { data: newUser, error: createUserError } = await supabase
+      .from("users")
+      .insert({
+        email: session.user.email,
+        name: session.user.name,
+        picture: session.user.image,
+      })
+      .select("id, household_id")
+      .single();
+
+    if (createUserError || !newUser) {
+      console.error("Failed to create user:", createUserError);
+      return NextResponse.json({ error: "Failed to create user" }, { status: 500 });
+    }
+    user = newUser;
   }
 
   if (user.household_id) {
