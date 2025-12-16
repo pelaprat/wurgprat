@@ -160,11 +160,11 @@ function HomeContent() {
     return (
       <div className="max-w-2xl mx-auto text-center py-16">
         <h1 className="text-4xl font-bold text-gray-900 mb-4">
-          Plan Meals Together
+          Manage the house
         </h1>
         <p className="text-xl text-gray-600 mb-8">
-          A simple way for you and your partner to plan weekly meals,
-          manage recipes, and build grocery lists — synced with Google Calendar.
+          A simple way to manage our house's weekly meal plans, 
+          calendar, and other activities
         </p>
         <button
           onClick={() => signIn("google")}
