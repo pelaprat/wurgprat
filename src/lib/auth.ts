@@ -26,46 +26,26 @@ export const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async signIn({ user, profile }) {
-      // Create or update user in database on sign-in
+      // Create or update user in database on sign-in using upsert
       const supabase = getServiceSupabase();
 
-      const { data: existingUser, error: selectError } = await supabase
+      const { error: upsertError } = await supabase
         .from("users")
-        .select("id, household_id")
-        .eq("email", user.email)
-        .single();
-
-      // PGRST116 means no rows found, which is expected for new users
-      if (selectError && selectError.code !== "PGRST116") {
-        console.error("Error checking for existing user:", selectError);
-      }
-
-      if (!existingUser) {
-        // Create new user
-        const { error: insertError } = await supabase.from("users").insert({
-          email: user.email,
-          name: user.name,
-          picture: (profile as { picture?: string })?.picture || user.image,
-        });
-
-        if (insertError) {
-          console.error("Failed to create user in database:", insertError);
-          // Still allow sign-in, but log the error
-          // The user can try again and hopefully the insert will succeed
-        }
-      } else {
-        // Update existing user's profile
-        const { error: updateError } = await supabase
-          .from("users")
-          .update({
+        .upsert(
+          {
+            email: user.email,
             name: user.name,
             picture: (profile as { picture?: string })?.picture || user.image,
-          })
-          .eq("email", user.email);
+          },
+          {
+            onConflict: "email",
+            ignoreDuplicates: false,
+          }
+        );
 
-        if (updateError) {
-          console.error("Failed to update user in database:", updateError);
-        }
+      if (upsertError) {
+        console.error("Failed to upsert user in database:", upsertError);
+        // Still allow sign-in - the household API has a fallback to create the user
       }
 
       return true;

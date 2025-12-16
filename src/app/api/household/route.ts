@@ -34,11 +34,14 @@ export async function POST(request: NextRequest) {
     console.log("User not found, creating user for:", session.user.email);
     const { data: newUser, error: createUserError } = await supabase
       .from("users")
-      .insert({
-        email: session.user.email,
-        name: session.user.name,
-        picture: session.user.image,
-      })
+      .upsert(
+        {
+          email: session.user.email,
+          name: session.user.name,
+          picture: session.user.image,
+        },
+        { onConflict: "email" }
+      )
       .select("id, household_id")
       .single();
 
