@@ -208,38 +208,124 @@ export async function POST(request: NextRequest) {
 
     console.log(`[create-from-url] Created recipe: ${newRecipe.id}`);
 
-    // Step 5: Create ingredients
+    // Step 5: Get existing ingredients and use AI for fuzzy matching
+    const { data: existingIngredients } = await supabase
+      .from("ingredients")
+      .select("id, name")
+      .eq("household_id", user.household_id);
+
+    // Build exact match map
+    const ingredientMap = new Map<string, string>();
+    existingIngredients?.forEach((ing) => {
+      ingredientMap.set(ing.name.toLowerCase(), ing.id);
+    });
+
+    // Use AI to fuzzy match extracted ingredients to existing ones
+    const fuzzyMatchMap = new Map<string, string>();
+    const extractedNames = extracted.ingredients.map((ing) => ing.name).filter(Boolean);
+
+    if (existingIngredients && existingIngredients.length > 0 && extractedNames.length > 0) {
+      const existingNames = existingIngredients.map((ing) => ing.name);
+
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+      const matchModel = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+      const matchPrompt = `You are matching recipe ingredients to an existing ingredient database.
+
+EXISTING INGREDIENTS IN DATABASE:
+${existingNames.map((name, i) => `${i + 1}. ${name}`).join("\n")}
+
+INGREDIENTS TO MATCH:
+${extractedNames.map((name, i) => `${i + 1}. ${name}`).join("\n")}
+
+For each ingredient to match, find the best matching existing ingredient if one exists.
+Consider these as matches:
+- Plural/singular variations (e.g., "tomato" = "tomatoes")
+- With/without modifiers (e.g., "olive oil" = "extra virgin olive oil", "chicken breast" = "boneless skinless chicken breasts")
+- Common variations (e.g., "garlic" = "garlic cloves", "butter" = "unsalted butter")
+
+Return a JSON array where each element corresponds to an ingredient to match.
+Each element should be either:
+- The EXACT name from the existing ingredients list (if a good match exists)
+- null (if no good match exists and a new ingredient should be created)
+
+Only match if you're confident it's the same core ingredient. Don't match different ingredients.
+For example, "chicken breast" should NOT match "chicken thighs" - these are different cuts.
+
+Return ONLY the JSON array, no other text. Example: ["existing ingredient 1", null, "existing ingredient 3"]`;
+
+      try {
+        const matchResult = await matchModel.generateContent(matchPrompt);
+        const matchResponse = await matchResult.response;
+        let matchJsonStr = matchResponse.text().trim();
+
+        // Clean up potential markdown formatting
+        if (matchJsonStr.startsWith("```json")) {
+          matchJsonStr = matchJsonStr.slice(7);
+        } else if (matchJsonStr.startsWith("```")) {
+          matchJsonStr = matchJsonStr.slice(3);
+        }
+        if (matchJsonStr.endsWith("```")) {
+          matchJsonStr = matchJsonStr.slice(0, -3);
+        }
+        matchJsonStr = matchJsonStr.trim();
+
+        const matches: (string | null)[] = JSON.parse(matchJsonStr);
+
+        // Build fuzzy match map
+        for (let i = 0; i < extractedNames.length && i < matches.length; i++) {
+          const extractedName = extractedNames[i].toLowerCase().trim();
+          const matchedName = matches[i];
+
+          if (matchedName) {
+            const matchedIngredient = existingIngredients.find(
+              (ing) => ing.name.toLowerCase() === matchedName.toLowerCase()
+            );
+            if (matchedIngredient) {
+              fuzzyMatchMap.set(extractedName, matchedIngredient.id);
+              console.log(`[create-from-url] Fuzzy matched: "${extractedNames[i]}" -> "${matchedName}"`);
+            }
+          }
+        }
+      } catch (matchError) {
+        console.error("[create-from-url] Fuzzy matching failed, using exact match:", matchError);
+      }
+    }
+
+    // Step 6: Create/link ingredients
     let ingredientsCreated = 0;
     for (let j = 0; j < extracted.ingredients.length; j++) {
       const ing = extracted.ingredients[j];
       if (!ing.name) continue;
 
-      // Find or create ingredient
-      let { data: ingredient } = await supabase
-        .from("ingredients")
-        .select("id")
-        .eq("household_id", user.household_id)
-        .eq("name", ing.name.toLowerCase())
-        .single();
+      const normalizedName = ing.name.toLowerCase().trim();
 
-      if (!ingredient) {
+      // Try fuzzy match first, then exact match
+      let ingredientId = fuzzyMatchMap.get(normalizedName) || ingredientMap.get(normalizedName);
+
+      if (!ingredientId) {
+        // Create new ingredient
         const { data: newIng } = await supabase
           .from("ingredients")
           .insert({
             household_id: user.household_id,
-            name: ing.name.toLowerCase(),
+            name: ing.name.trim(),
           })
           .select("id")
           .single();
-        ingredient = newIng;
+
+        ingredientId = newIng?.id;
+        if (ingredientId) {
+          ingredientMap.set(normalizedName, ingredientId);
+        }
       }
 
-      if (ingredient) {
+      if (ingredientId) {
         const { error: linkError } = await supabase
           .from("recipe_ingredients")
           .insert({
             recipe_id: newRecipe.id,
-            ingredient_id: ingredient.id,
+            ingredient_id: ingredientId,
             quantity: ing.quantity,
             unit: ing.unit,
             notes: ing.notes,
@@ -252,7 +338,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    console.log(`[create-from-url] Created ${ingredientsCreated} ingredients`);
+    console.log(`[create-from-url] Created/linked ${ingredientsCreated} ingredients`);
 
     // Return success with debug info
     return NextResponse.json({

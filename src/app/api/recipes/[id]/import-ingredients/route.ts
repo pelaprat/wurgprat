@@ -228,10 +228,82 @@ ${html.slice(0, 50000)}`;
       .select("id, name")
       .eq("household_id", user.household_id);
 
+    // Build a map for quick exact match lookup
     const ingredientMap = new Map<string, string>();
     existingIngredients?.forEach((ing) => {
       ingredientMap.set(ing.name.toLowerCase(), ing.id);
     });
+
+    // Use AI to fuzzy match extracted ingredients to existing ones
+    let fuzzyMatchMap = new Map<string, string | null>();
+
+    if (existingIngredients && existingIngredients.length > 0 && extractedIngredients.length > 0) {
+      const extractedNames = extractedIngredients.map(ing => ing.name);
+      const existingNames = existingIngredients.map(ing => ing.name);
+
+      const matchPrompt = `You are matching recipe ingredients to an existing ingredient database.
+
+EXISTING INGREDIENTS IN DATABASE:
+${existingNames.map((name, i) => `${i + 1}. ${name}`).join("\n")}
+
+INGREDIENTS TO MATCH:
+${extractedNames.map((name, i) => `${i + 1}. ${name}`).join("\n")}
+
+For each ingredient to match, find the best matching existing ingredient if one exists.
+Consider these as matches:
+- Plural/singular variations (e.g., "tomato" = "tomatoes")
+- With/without modifiers (e.g., "olive oil" = "extra virgin olive oil", "chicken breast" = "boneless skinless chicken breasts")
+- Common variations (e.g., "garlic" = "garlic cloves", "butter" = "unsalted butter")
+
+Return a JSON array where each element corresponds to an ingredient to match.
+Each element should be either:
+- The EXACT name from the existing ingredients list (if a good match exists)
+- null (if no good match exists and a new ingredient should be created)
+
+Only match if you're confident it's the same core ingredient. Don't match different ingredients.
+For example, "chicken breast" should NOT match "chicken thighs" - these are different cuts.
+
+Return ONLY the JSON array, no other text. Example: ["existing ingredient 1", null, "existing ingredient 3"]`;
+
+      try {
+        const matchResult = await model.generateContent(matchPrompt);
+        const matchResponse = await matchResult.response;
+        let matchJsonStr = matchResponse.text().trim();
+
+        // Clean up potential markdown formatting
+        if (matchJsonStr.startsWith("```json")) {
+          matchJsonStr = matchJsonStr.slice(7);
+        } else if (matchJsonStr.startsWith("```")) {
+          matchJsonStr = matchJsonStr.slice(3);
+        }
+        if (matchJsonStr.endsWith("```")) {
+          matchJsonStr = matchJsonStr.slice(0, -3);
+        }
+        matchJsonStr = matchJsonStr.trim();
+
+        const matches: (string | null)[] = JSON.parse(matchJsonStr);
+
+        // Build fuzzy match map
+        for (let i = 0; i < extractedNames.length && i < matches.length; i++) {
+          const extractedName = extractedNames[i].toLowerCase().trim();
+          const matchedName = matches[i];
+
+          if (matchedName) {
+            // Find the ID for the matched ingredient
+            const matchedIngredient = existingIngredients.find(
+              ing => ing.name.toLowerCase() === matchedName.toLowerCase()
+            );
+            if (matchedIngredient) {
+              fuzzyMatchMap.set(extractedName, matchedIngredient.id);
+              console.log(`Fuzzy matched: "${extractedNames[i]}" -> "${matchedName}"`);
+            }
+          }
+        }
+      } catch (matchError) {
+        console.error("Fuzzy matching failed, falling back to exact match:", matchError);
+        // Continue with exact matching only
+      }
+    }
 
     // Deduplicate ingredients - combine duplicates into notes
     const deduplicatedIngredients: Map<string, ExtractedIngredient & { sortOrder: number }> = new Map();
@@ -261,7 +333,8 @@ ${html.slice(0, 50000)}`;
     const recipeIngredients = [];
 
     for (const [normalizedName, extracted] of Array.from(deduplicatedIngredients.entries())) {
-      let ingredientId = ingredientMap.get(normalizedName);
+      // First try fuzzy match, then exact match
+      let ingredientId = fuzzyMatchMap.get(normalizedName) || ingredientMap.get(normalizedName);
 
       // Create ingredient if it doesn't exist
       if (!ingredientId) {
