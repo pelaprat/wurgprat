@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getServiceSupabase } from "@/lib/supabase";
+import { createMealCalendarEvent } from "@/lib/google";
 
 interface ProposedMeal {
   day: number;
@@ -124,11 +125,12 @@ export async function POST(request: NextRequest) {
       created_by: user.id,
     }));
 
-    const { error: mealsError } = await supabase
+    const { data: createdMeals, error: mealsError } = await supabase
       .from("meals")
-      .insert(mealsToInsert);
+      .insert(mealsToInsert)
+      .select("id, day, meal_type, recipe_id, custom_meal_name, assigned_user_id");
 
-    if (mealsError) {
+    if (mealsError || !createdMeals) {
       console.error("Failed to create meals:", mealsError);
       // Try to clean up the weekly plan
       await supabase.from("weekly_plan").delete().eq("id", weeklyPlan.id);
@@ -136,6 +138,94 @@ export async function POST(request: NextRequest) {
         { error: "Failed to create meals" },
         { status: 500 }
       );
+    }
+
+    // 2.5. Create Google Calendar events for meals (if calendar is configured)
+    const accessToken = session.accessToken as string | undefined;
+
+    // Get household settings for calendar ID and timezone
+    const { data: household } = await supabase
+      .from("households")
+      .select("settings, timezone")
+      .eq("id", user.household_id)
+      .single();
+
+    const calendarId = household?.settings?.google_calendar_id;
+    const timezone = household?.timezone || "America/New_York";
+
+    if (accessToken && calendarId) {
+      // Get user names for assigned users
+      const assignedUserIds = Array.from(new Set(createdMeals
+        .filter(m => m.assigned_user_id)
+        .map(m => m.assigned_user_id as string)));
+
+      let userNames: Record<string, string> = {};
+      if (assignedUserIds.length > 0) {
+        const { data: users } = await supabase
+          .from("users")
+          .select("id, name")
+          .in("id", assignedUserIds);
+
+        userNames = (users || []).reduce((acc, u) => {
+          acc[u.id] = u.name || "Unknown";
+          return acc;
+        }, {} as Record<string, string>);
+      }
+
+      // Get recipe names
+      const recipeIds = Array.from(new Set(createdMeals
+        .filter(m => m.recipe_id)
+        .map(m => m.recipe_id as string)));
+
+      let recipeNames: Record<string, string> = {};
+      if (recipeIds.length > 0) {
+        const { data: recipes } = await supabase
+          .from("recipes")
+          .select("id, name")
+          .in("id", recipeIds);
+
+        recipeNames = (recipes || []).reduce((acc, r) => {
+          acc[r.id] = r.name;
+          return acc;
+        }, {} as Record<string, string>);
+      }
+
+      // Create calendar events for each meal
+      for (const meal of createdMeals) {
+        // Find the original meal data to get the date
+        const originalMeal = meals.find(m => m.day === meal.day);
+        if (!originalMeal?.date) continue;
+
+        const mealName = meal.recipe_id
+          ? recipeNames[meal.recipe_id] || "Dinner"
+          : meal.custom_meal_name || "Dinner";
+
+        const assignedUserName = meal.assigned_user_id
+          ? userNames[meal.assigned_user_id]
+          : undefined;
+
+        try {
+          const eventId = await createMealCalendarEvent(accessToken, calendarId, {
+            mealId: meal.id,
+            date: originalMeal.date,
+            mealType: meal.meal_type,
+            mealName,
+            assignedUserName,
+            timezone,
+          });
+
+          if (eventId) {
+            // Update the meal with the calendar event ID
+            await supabase
+              .from("meals")
+              .update({ calendar_event_id: eventId })
+              .eq("id", meal.id);
+          }
+        } catch (error) {
+          console.error(`Failed to create calendar event for meal ${meal.id}:`, error);
+          // Don't fail the whole operation, calendar events are secondary
+        }
+      }
     }
 
     // 3. Create grocery list

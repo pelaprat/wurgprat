@@ -11,6 +11,7 @@ const navLinks = [
   { href: "/recipes", label: "Recipes" },
   { href: "/events", label: "Events" },
   { href: "/ingredients", label: "Ingredients" },
+  { href: "/departments", label: "Departments" },
   { href: "/stores", label: "Stores" },
 ];
 

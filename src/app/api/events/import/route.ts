@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getServiceSupabase } from "@/lib/supabase";
-import { fetchIcsCalendar } from "@/lib/google";
+import { fetchIcsCalendar, isMealEvent } from "@/lib/google";
 
 interface ImportResult {
   success: boolean;
@@ -103,6 +103,13 @@ export async function POST() {
       if (!event.summary) {
         result.eventsSkipped++;
         result.skippedReasons.push(`Event with UID "${event.uid}" skipped: missing title/summary`);
+        continue;
+      }
+
+      // Skip meal events created by our app (to avoid importing them back)
+      if (isMealEvent(event.description)) {
+        result.eventsSkipped++;
+        result.skippedReasons.push(`Event "${event.summary}" skipped: meal event from Household Manager`);
         continue;
       }
 

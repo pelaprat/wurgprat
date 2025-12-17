@@ -9,31 +9,21 @@ interface Store {
   name: string;
 }
 
+interface Department {
+  id: string;
+  name: string;
+  sort_order: number;
+}
+
 interface Ingredient {
   id: string;
   name: string;
   department?: string;
+  department_id?: string;
   store?: Store;
   store_id?: string;
   created_at: string;
 }
-
-// Common grocery store departments
-const DEPARTMENTS = [
-  "Produce",
-  "Meat & Seafood",
-  "Dairy",
-  "Bakery",
-  "Frozen",
-  "Pantry",
-  "Canned Goods",
-  "Spices & Seasonings",
-  "Condiments",
-  "Beverages",
-  "Snacks",
-  "Deli",
-  "Other",
-];
 
 interface DuplicateIngredient {
   id: string;
@@ -76,10 +66,14 @@ export default function IngredientsPage() {
   // Stores state
   const [stores, setStores] = useState<Store[]>([]);
 
+  // Departments state
+  const [departmentsList, setDepartmentsList] = useState<Department[]>([]);
+
   useEffect(() => {
     if (session) {
       fetchIngredients();
       fetchStores();
+      fetchDepartments();
     }
   }, [session]);
 
@@ -106,6 +100,18 @@ export default function IngredientsPage() {
       }
     } catch (error) {
       console.error("Failed to fetch stores:", error);
+    }
+  };
+
+  const fetchDepartments = async () => {
+    try {
+      const response = await fetch("/api/departments");
+      if (response.ok) {
+        const data = await response.json();
+        setDepartmentsList(data.departments || []);
+      }
+    } catch (error) {
+      console.error("Failed to fetch departments:", error);
     }
   };
 
@@ -614,13 +620,13 @@ export default function IngredientsPage() {
                         className="w-full text-sm border-0 bg-transparent text-gray-600 focus:ring-2 focus:ring-emerald-500 rounded cursor-pointer hover:bg-gray-100 py-1 px-2 -ml-2"
                       >
                         <option value="">-</option>
-                        {DEPARTMENTS.map((dept) => (
-                          <option key={dept} value={dept}>
-                            {dept}
+                        {departmentsList.map((dept) => (
+                          <option key={dept.id} value={dept.name}>
+                            {dept.name}
                           </option>
                         ))}
                         {ingredient.department &&
-                          !DEPARTMENTS.includes(ingredient.department) && (
+                          !departmentsList.some(d => d.name === ingredient.department) && (
                             <option value={ingredient.department}>
                               {ingredient.department}
                             </option>

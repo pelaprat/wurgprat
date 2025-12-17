@@ -16,6 +16,12 @@ interface Store {
   name: string;
 }
 
+interface Department {
+  id: string;
+  name: string;
+  sort_order: number;
+}
+
 interface RecipeIngredient {
   id: string;
   quantity?: number;
@@ -51,6 +57,7 @@ export default function IngredientDetailPage() {
   const [editedDepartment, setEditedDepartment] = useState("");
   const [editedStoreId, setEditedStoreId] = useState<string | null>(null);
   const [stores, setStores] = useState<Store[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [isSavingDetails, setIsSavingDetails] = useState(false);
   const [isAutoAssigningDepartment, setIsAutoAssigningDepartment] = useState(false);
 
@@ -173,7 +180,7 @@ export default function IngredientDetailPage() {
     }
   };
 
-  // Fetch stores for dropdown
+  // Fetch stores and departments for dropdowns
   useEffect(() => {
     const fetchStores = async () => {
       try {
@@ -187,8 +194,21 @@ export default function IngredientDetailPage() {
       }
     };
 
+    const fetchDepartments = async () => {
+      try {
+        const response = await fetch("/api/departments");
+        if (response.ok) {
+          const data = await response.json();
+          setDepartments(data.departments || []);
+        }
+      } catch (err) {
+        console.error("Failed to fetch departments:", err);
+      }
+    };
+
     if (session) {
       fetchStores();
+      fetchDepartments();
     }
   }, [session]);
 
@@ -410,13 +430,24 @@ export default function IngredientDetailPage() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm text-gray-600 mb-1">Department:</label>
-                  <input
-                    type="text"
+                  <select
                     value={editedDepartment}
                     onChange={(e) => setEditedDepartment(e.target.value)}
-                    placeholder="e.g., Produce, Dairy, Meat"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  />
+                  >
+                    <option value="">Not assigned</option>
+                    {departments.map((dept) => (
+                      <option key={dept.id} value={dept.name}>
+                        {dept.name}
+                      </option>
+                    ))}
+                    {editedDepartment &&
+                      !departments.some((d) => d.name === editedDepartment) && (
+                        <option value={editedDepartment}>
+                          {editedDepartment}
+                        </option>
+                      )}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm text-gray-600 mb-1">Preferred Store:</label>

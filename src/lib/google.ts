@@ -1,5 +1,9 @@
 import { google } from "googleapis";
 
+// Special identifier to mark meal events in Google Calendar
+// This is used to skip importing these events back as "events" in our app
+export const MEAL_EVENT_IDENTIFIER = "[HouseholdManager:Meal]";
+
 export function getGoogleAuth(accessToken: string) {
   const auth = new google.auth.OAuth2();
   auth.setCredentials({ access_token: accessToken });
@@ -221,6 +225,113 @@ function getMealTime(date: string, mealType: string): Date {
   };
   d.setHours(hours[mealType] || 12, 0, 0, 0);
   return d;
+}
+
+// Create a Google Calendar event for a meal
+export async function createMealCalendarEvent(
+  accessToken: string,
+  calendarId: string,
+  options: {
+    mealId: string;
+    date: string;
+    mealType: string;
+    mealName: string;
+    assignedUserName?: string;
+    timezone?: string;
+  }
+): Promise<string | null> {
+  const { mealId, date, mealType, mealName, assignedUserName, timezone } = options;
+
+  // Build the title: "Dinner: Spaghetti (Chef: John)"
+  const mealTypeCapitalized = mealType.charAt(0).toUpperCase() + mealType.slice(1);
+  let title = `${mealTypeCapitalized}: ${mealName}`;
+  if (assignedUserName) {
+    title += ` (Chef: ${assignedUserName})`;
+  }
+
+  // Build description with identifier
+  const description = `${MEAL_EVENT_IDENTIFIER}\nMeal ID: ${mealId}`;
+
+  const startTime = getMealTime(date, mealType);
+  const endTime = new Date(startTime.getTime() + 60 * 60 * 1000); // 1 hour
+  const tz = timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  try {
+    const event = await createCalendarEvent(accessToken, calendarId, {
+      summary: title,
+      description,
+      start: {
+        dateTime: startTime.toISOString(),
+        timeZone: tz,
+      },
+      end: {
+        dateTime: endTime.toISOString(),
+        timeZone: tz,
+      },
+    });
+
+    return event.id || null;
+  } catch (error) {
+    console.error("Failed to create meal calendar event:", error);
+    return null;
+  }
+}
+
+// Update a Google Calendar event for a meal (e.g., when assignee changes)
+export async function updateMealCalendarEvent(
+  accessToken: string,
+  calendarId: string,
+  eventId: string,
+  options: {
+    mealId: string;
+    mealName: string;
+    mealType: string;
+    assignedUserName?: string;
+  }
+): Promise<boolean> {
+  const { mealId, mealName, mealType, assignedUserName } = options;
+
+  // Build the title: "Dinner: Spaghetti (Chef: John)"
+  const mealTypeCapitalized = mealType.charAt(0).toUpperCase() + mealType.slice(1);
+  let title = `${mealTypeCapitalized}: ${mealName}`;
+  if (assignedUserName) {
+    title += ` (Chef: ${assignedUserName})`;
+  }
+
+  // Build description with identifier
+  const description = `${MEAL_EVENT_IDENTIFIER}\nMeal ID: ${mealId}`;
+
+  try {
+    await updateCalendarEvent(accessToken, calendarId, eventId, {
+      summary: title,
+      description,
+    });
+    return true;
+  } catch (error) {
+    console.error("Failed to update meal calendar event:", error);
+    return false;
+  }
+}
+
+// Delete a Google Calendar event for a meal
+export async function deleteMealCalendarEvent(
+  accessToken: string,
+  calendarId: string,
+  eventId: string
+): Promise<boolean> {
+  try {
+    await deleteCalendarEvent(accessToken, calendarId, eventId);
+    return true;
+  } catch (error) {
+    console.error("Failed to delete meal calendar event:", error);
+    return false;
+  }
+}
+
+// Check if an event description indicates it's a meal event from our app
+export function isMealEvent(description?: string | null): boolean {
+  if (!description) return false;
+  return description.includes(MEAL_EVENT_IDENTIFIER);
 }
 
 // Event type for parsed ICS events
