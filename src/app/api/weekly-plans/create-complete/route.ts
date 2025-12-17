@@ -10,6 +10,13 @@ interface ProposedMeal {
   recipeName: string;
   customMealName?: string;
   isAiSuggested: boolean;
+  assignedUserId?: string;
+  sortOrder?: number;
+}
+
+interface EventAssignment {
+  eventId: string;
+  assignedUserIds: string[];
 }
 
 interface RecipeBreakdown {
@@ -53,10 +60,11 @@ export async function POST(request: NextRequest) {
 
   // Parse request
   const body = await request.json();
-  const { weekOf, meals, groceryItems, notes } = body as {
+  const { weekOf, meals, groceryItems, eventAssignments, notes } = body as {
     weekOf: string;
     meals: ProposedMeal[];
     groceryItems: GroceryItemDraft[];
+    eventAssignments?: EventAssignment[];
     notes?: string;
   };
 
@@ -106,13 +114,15 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. Create meals
-    const mealsToInsert = meals.map((meal) => ({
+    const mealsToInsert = meals.map((meal, index) => ({
       weekly_plan_id: weeklyPlan.id,
       recipe_id: meal.recipeId || null,
       day: meal.day,
       meal_type: "dinner" as const,
       custom_meal_name: meal.customMealName || null,
       is_ai_suggested: meal.isAiSuggested,
+      assigned_user_id: meal.assignedUserId || null,
+      sort_order: meal.sortOrder ?? index,
       created_by: user.id,
     }));
 
@@ -222,11 +232,42 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // 5. Create event assignments
+    if (eventAssignments && eventAssignments.length > 0) {
+      const assignmentsToInsert: Array<{
+        weekly_plan_id: string;
+        event_id: string;
+        user_id: string;
+      }> = [];
+
+      for (const assignment of eventAssignments) {
+        for (const userId of assignment.assignedUserIds) {
+          assignmentsToInsert.push({
+            weekly_plan_id: weeklyPlan.id,
+            event_id: assignment.eventId,
+            user_id: userId,
+          });
+        }
+      }
+
+      if (assignmentsToInsert.length > 0) {
+        const { error: assignmentsError } = await supabase
+          .from("weekly_plan_event_assignments")
+          .insert(assignmentsToInsert);
+
+        if (assignmentsError) {
+          console.error("Failed to create event assignments:", assignmentsError);
+          // Don't fail the whole operation, event assignments are secondary
+        }
+      }
+    }
+
     return NextResponse.json({
       weeklyPlanId: weeklyPlan.id,
       groceryListId: groceryList.id,
       mealCount: meals.length,
       itemCount: groceryItems?.length || 0,
+      eventAssignmentCount: eventAssignments?.length || 0,
     });
   } catch (error) {
     console.error("Error creating weekly plan:", error);

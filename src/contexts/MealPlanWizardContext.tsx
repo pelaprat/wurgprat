@@ -21,6 +21,12 @@ export interface ProposedMeal {
   aiReasoning?: string; // Why AI chose this
   isAiSuggested: boolean;
   sortOrder?: number; // Order within the day
+  assignedUserId?: string; // User responsible for cooking
+}
+
+export interface EventAssignment {
+  eventId: string;
+  assignedUserIds: string[]; // Multiple users can be assigned to an event
 }
 
 export interface RecipeBreakdown {
@@ -54,6 +60,9 @@ export interface MealPlanWizardState {
   proposedMeals: ProposedMeal[];
   weekEvents: Event[]; // Events for the selected week
 
+  // Phase 2.5 data (event assignments)
+  eventAssignments: EventAssignment[];
+
   // Phase 3 data
   groceryItems: GroceryItemDraft[];
 
@@ -85,6 +94,11 @@ interface MealPlanWizardContextType extends MealPlanWizardState {
   swapMealsById: (mealId1: string, mealId2: string) => void;
   setAiExplanation: (explanation: string) => void;
   getMealsForDay: (day: number) => ProposedMeal[];
+
+  // Phase 2.5 actions (event assignments)
+  setEventAssignments: (assignments: EventAssignment[]) => void;
+  updateEventAssignment: (eventId: string, userIds: string[]) => void;
+  toggleEventUserAssignment: (eventId: string, userId: string) => void;
 
   // Phase 3 actions
   setGroceryItems: (items: GroceryItemDraft[]) => void;
@@ -123,6 +137,7 @@ const initialState: MealPlanWizardState = {
   selectedRecipeIds: [],
   proposedMeals: [],
   weekEvents: [],
+  eventAssignments: [],
   groceryItems: [],
   aiExplanation: undefined,
   isGenerating: false,
@@ -288,6 +303,52 @@ export function MealPlanWizardProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, aiExplanation: explanation }));
   }, []);
 
+  // Phase 2.5 actions (event assignments)
+  const setEventAssignments = useCallback((assignments: EventAssignment[]) => {
+    setState((prev) => ({ ...prev, eventAssignments: assignments }));
+  }, []);
+
+  const updateEventAssignment = useCallback((eventId: string, userIds: string[]) => {
+    setState((prev) => {
+      const existingIndex = prev.eventAssignments.findIndex((a) => a.eventId === eventId);
+      if (existingIndex >= 0) {
+        // Update existing
+        const updated = [...prev.eventAssignments];
+        updated[existingIndex] = { eventId, assignedUserIds: userIds };
+        return { ...prev, eventAssignments: updated };
+      } else {
+        // Add new
+        return {
+          ...prev,
+          eventAssignments: [...prev.eventAssignments, { eventId, assignedUserIds: userIds }],
+        };
+      }
+    });
+  }, []);
+
+  const toggleEventUserAssignment = useCallback((eventId: string, userId: string) => {
+    setState((prev) => {
+      const existing = prev.eventAssignments.find((a) => a.eventId === eventId);
+      if (existing) {
+        const hasUser = existing.assignedUserIds.includes(userId);
+        const newUserIds = hasUser
+          ? existing.assignedUserIds.filter((id) => id !== userId)
+          : [...existing.assignedUserIds, userId];
+        return {
+          ...prev,
+          eventAssignments: prev.eventAssignments.map((a) =>
+            a.eventId === eventId ? { ...a, assignedUserIds: newUserIds } : a
+          ),
+        };
+      } else {
+        return {
+          ...prev,
+          eventAssignments: [...prev.eventAssignments, { eventId, assignedUserIds: [userId] }],
+        };
+      }
+    });
+  }, []);
+
   // Phase 3 actions
   const setGroceryItems = useCallback((items: GroceryItemDraft[]) => {
     setState((prev) => ({ ...prev, groceryItems: items }));
@@ -377,6 +438,9 @@ export function MealPlanWizardProvider({ children }: { children: ReactNode }) {
         swapMealsById,
         setAiExplanation,
         getMealsForDay,
+        setEventAssignments,
+        updateEventAssignment,
+        toggleEventUserAssignment,
         setGroceryItems,
         updateGroceryItem,
         removeGroceryItem,

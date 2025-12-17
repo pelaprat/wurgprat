@@ -4,12 +4,18 @@ import { useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
+interface HouseholdResult {
+  joined: boolean;
+  household_name: string;
+}
+
 export default function OnboardingPage() {
   const { data: session, update } = useSession();
   const router = useRouter();
   const [householdName, setHouseholdName] = useState("Wurgprat");
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<HouseholdResult | null>(null);
 
   const handleCreateHousehold = async () => {
     if (!householdName.trim()) {
@@ -19,6 +25,7 @@ export default function OnboardingPage() {
 
     setIsCreating(true);
     setError(null);
+    setSuccess(null);
 
     try {
       const response = await fetch("/api/household", {
@@ -29,16 +36,27 @@ export default function OnboardingPage() {
         body: JSON.stringify({ name: householdName }),
       });
 
+      const data = await response.json();
+
       if (response.ok) {
+        // Show success message before redirecting
+        setSuccess({
+          joined: data.joined,
+          household_name: data.household_name,
+        });
+
         // Update the session to reflect the new household
         await update();
-        router.push("/");
+
+        // Wait a moment for user to see the message, then redirect
+        setTimeout(() => {
+          router.push("/");
+        }, 2000);
       } else {
-        const data = await response.json();
-        setError(data.error || "Failed to create household");
+        setError(data.error || "Failed to join household");
       }
     } catch {
-      setError("Failed to create household. Please try again.");
+      setError("Failed to join household. Please try again.");
     } finally {
       setIsCreating(false);
     }
@@ -70,11 +88,11 @@ export default function OnboardingPage() {
 
       <div className="bg-white rounded-xl shadow-sm p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">
-          Create Your Household
+          Join or Create a Household
         </h2>
         <p className="text-gray-600 mb-6">
-          A household is where you and your family members can share recipes,
-          meal plans, and grocery lists.
+          Enter a household name. If a household with that name already exists,
+          you&apos;ll join it. Otherwise, a new household will be created for you.
         </p>
 
         <div className="mb-6">
@@ -91,6 +109,7 @@ export default function OnboardingPage() {
             onChange={(e) => setHouseholdName(e.target.value)}
             placeholder="e.g., The Smiths"
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            disabled={!!success}
           />
         </div>
 
@@ -100,12 +119,28 @@ export default function OnboardingPage() {
           </div>
         )}
 
+        {success && (
+          <div className="mb-6 p-4 rounded-lg bg-emerald-50 text-emerald-800">
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              <span>
+                {success.joined
+                  ? `You joined the "${success.household_name}" household!`
+                  : `Created new household "${success.household_name}" and added you to it!`}
+              </span>
+            </div>
+            <p className="text-sm mt-2 text-emerald-600">Redirecting to home...</p>
+          </div>
+        )}
+
         <button
           onClick={handleCreateHousehold}
-          disabled={isCreating}
+          disabled={isCreating || !!success}
           className="w-full bg-emerald-600 text-white px-6 py-3 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {isCreating ? "Creating..." : "Create Household"}
+          {isCreating ? "Please wait..." : success ? "Done!" : "Join or Create Household"}
         </button>
       </div>
     </div>

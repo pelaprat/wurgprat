@@ -2,19 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getServiceSupabase } from "@/lib/supabase";
-import { getCalendarEvents, createCalendarEvent } from "@/lib/google";
+import { createCalendarEvent } from "@/lib/google";
 
-// GET events from Google Calendar
+// GET events from database (shared across household)
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
 
-  if (!session?.user?.email || !session.accessToken) {
+  if (!session?.user?.email) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const supabase = getServiceSupabase();
 
-  // Get user's household to retrieve calendar settings
+  // Get user's household
   const { data: user, error: userError } = await supabase
     .from("users")
     .select("household_id")
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Household not found" }, { status: 404 });
   }
 
-  // Get household settings for calendar ID
+  // Get household settings for calendar ID (for informational purposes)
   const { data: household, error: householdError } = await supabase
     .from("households")
     .select("settings")
@@ -41,50 +41,47 @@ export async function GET(request: NextRequest) {
 
   const calendarId = household?.settings?.google_calendar_id;
 
-  if (!calendarId) {
-    return NextResponse.json({
-      events: [],
-      message: "No calendar configured. Please select a calendar in Settings.",
-    });
-  }
-
   // Parse query params
   const searchParams = request.nextUrl.searchParams;
-  const search = searchParams.get("search") || undefined;
-  const upcoming = searchParams.get("upcoming");
   const daysAhead = parseInt(searchParams.get("days") || "60");
 
   try {
     // Calculate time range
-    const timeMin = upcoming === "true" ? new Date().toISOString() : undefined;
+    const timeMin = new Date();
+    timeMin.setDate(timeMin.getDate() - 7); // Include events from past week
     const timeMax = new Date();
     timeMax.setDate(timeMax.getDate() + daysAhead);
 
-    const googleEvents = await getCalendarEvents(session.accessToken, calendarId, {
-      timeMin,
-      timeMax: timeMax.toISOString(),
-      search,
-    });
+    // Fetch events from database (shared across household)
+    const { data: events, error: eventsError } = await supabase
+      .from("events")
+      .select("*")
+      .eq("household_id", user.household_id)
+      .gte("start_time", timeMin.toISOString())
+      .lte("start_time", timeMax.toISOString())
+      .order("start_time", { ascending: true });
 
-    // Transform Google Calendar events to our format
-    const events = googleEvents.map((event) => ({
-      id: event.id,
-      google_event_id: event.id,
-      title: event.summary || "Untitled Event",
-      description: event.description || null,
-      location: event.location || null,
-      start_time: event.start?.dateTime || event.start?.date,
-      end_time: event.end?.dateTime || event.end?.date,
-      all_day: !event.start?.dateTime,
-      calendar_id: calendarId,
-      html_link: event.htmlLink,
-    }));
+    if (eventsError) {
+      console.error("Failed to fetch events from database:", eventsError);
+      return NextResponse.json(
+        { error: "Failed to fetch events" },
+        { status: 500 }
+      );
+    }
 
-    return NextResponse.json({ events, calendarId });
+    // If no calendar is configured and no events exist, inform the user
+    if (!calendarId && (!events || events.length === 0)) {
+      return NextResponse.json({
+        events: [],
+        message: "No calendar configured. Please select a calendar in Settings to import events.",
+      });
+    }
+
+    return NextResponse.json({ events: events || [], calendarId });
   } catch (error) {
-    console.error("Failed to fetch calendar events:", error);
+    console.error("Failed to fetch events:", error);
     return NextResponse.json(
-      { error: "Failed to fetch events from Google Calendar. Please try signing out and back in." },
+      { error: "Failed to fetch events" },
       { status: 500 }
     );
   }

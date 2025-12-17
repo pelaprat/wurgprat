@@ -30,6 +30,13 @@ const DAY_NAMES = [
   "Friday",
 ];
 
+interface HouseholdMember {
+  id: string;
+  name: string;
+  email: string;
+  picture?: string;
+}
+
 // Format date as YYYY-MM-DD in local timezone (not UTC)
 function formatDateLocal(date: Date): string {
   const year = date.getFullYear();
@@ -50,11 +57,13 @@ interface DraggableMealProps {
   meal: ProposedMeal;
   onReplace: (mealId: string) => void;
   onRemove: (mealId: string) => void;
+  onAssign: (mealId: string, userId: string | undefined) => void;
   isReplacing: boolean;
   canRemove: boolean;
+  householdMembers: HouseholdMember[];
 }
 
-function DraggableMeal({ meal, onReplace, onRemove, isReplacing, canRemove }: DraggableMealProps) {
+function DraggableMeal({ meal, onReplace, onRemove, onAssign, isReplacing, canRemove, householdMembers }: DraggableMealProps) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `meal-${meal.mealId}`,
     data: { mealId: meal.mealId, day: meal.day },
@@ -120,6 +129,26 @@ function DraggableMeal({ meal, onReplace, onRemove, isReplacing, canRemove }: Dr
                 &quot;{meal.aiReasoning}&quot;
               </p>
             )}
+
+            {/* User assignment */}
+            <div className="mt-2 flex items-center gap-2">
+              <label className="text-xs text-gray-500">Cook:</label>
+              <select
+                value={meal.assignedUserId || ""}
+                onChange={(e) => onAssign(meal.mealId, e.target.value || undefined)}
+                className={`text-xs px-2 py-1 rounded border ${
+                  meal.assignedUserId ? "border-emerald-300 bg-emerald-50" : "border-amber-300 bg-amber-50"
+                } focus:ring-1 focus:ring-emerald-500`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <option value="">Assign someone...</option>
+                {householdMembers.map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.name || member.email}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 
@@ -212,9 +241,11 @@ interface DaySlotProps {
   meals: ProposedMeal[];
   onReplace: (mealId: string) => void;
   onRemove: (mealId: string) => void;
+  onAssign: (mealId: string, userId: string | undefined) => void;
   onAddMeal: (day: number, date: string) => void;
   replacingMealId: string | null;
   isDraggedOver: boolean;
+  householdMembers: HouseholdMember[];
 }
 
 function DaySlot({
@@ -224,9 +255,11 @@ function DaySlot({
   meals,
   onReplace,
   onRemove,
+  onAssign,
   onAddMeal,
   replacingMealId,
   isDraggedOver,
+  householdMembers,
 }: DaySlotProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: `day-${day}`,
@@ -305,8 +338,10 @@ function DaySlot({
                 meal={meal}
                 onReplace={onReplace}
                 onRemove={onRemove}
+                onAssign={onAssign}
                 isReplacing={replacingMealId === meal.mealId}
                 canRemove={meals.length > 1}
+                householdMembers={householdMembers}
               />
             ))}
           </>
@@ -340,6 +375,23 @@ export default function ReviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [activeDragMealId, setActiveDragMealId] = useState<string | null>(null);
   const [isAddingMeal, setIsAddingMeal] = useState(false);
+  const [householdMembers, setHouseholdMembers] = useState<HouseholdMember[]>([]);
+
+  // Fetch household members
+  useEffect(() => {
+    const fetchMembers = async () => {
+      try {
+        const response = await fetch("/api/household/members");
+        if (response.ok) {
+          const data = await response.json();
+          setHouseholdMembers(data.members || []);
+        }
+      } catch (err) {
+        console.error("Failed to fetch household members:", err);
+      }
+    };
+    fetchMembers();
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -480,6 +532,11 @@ export default function ReviewPage() {
     wizard.removeMeal(mealId);
   };
 
+  // Handle assign user to meal
+  const handleAssignUser = (mealId: string, userId: string | undefined) => {
+    wizard.updateMealById(mealId, { assignedUserId: userId });
+  };
+
   // Handle add meal to day
   const handleAddMeal = async (day: number, date: string) => {
     setIsAddingMeal(true);
@@ -521,9 +578,23 @@ export default function ReviewPage() {
     }
   };
 
-  // Handle continue to groceries
+  // Check if all meals have been assigned
+  const unassignedMeals = wizard.proposedMeals.filter((m) => !m.assignedUserId);
+  const allMealsAssigned = unassignedMeals.length === 0;
+
+  // Handle continue - now goes to event assignment if there are events, otherwise groceries
   const handleContinue = () => {
-    router.push("/weekly-plans/create/groceries");
+    if (!allMealsAssigned) {
+      setError(`Please assign a cook to all ${unassignedMeals.length} unassigned meal(s) before continuing.`);
+      return;
+    }
+    setError(null);
+    // If there are events for this week, go to events assignment step
+    if (wizard.weekEvents.length > 0) {
+      router.push("/weekly-plans/create/events");
+    } else {
+      router.push("/weekly-plans/create/groceries");
+    }
   };
 
   if (!session) {
@@ -570,7 +641,7 @@ export default function ReviewPage() {
         </div>
         <h1 className="text-2xl font-bold text-gray-900">Review Meal Plan</h1>
         <p className="text-gray-600 mt-1">
-          Step 2 of 4: Review and adjust your AI-generated meal plan
+          Step 2 of 5: Review meals and assign who&apos;s cooking
         </p>
       </div>
 
@@ -586,26 +657,33 @@ export default function ReviewPage() {
               />
             </svg>
           </div>
-          <span className="ml-2 text-sm text-emerald-600">Input</span>
+          <span className="ml-2 text-sm text-emerald-600">Start</span>
         </div>
         <div className="flex-1 h-0.5 bg-emerald-600 mx-2"></div>
         <div className="flex items-center">
           <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center text-sm font-medium">
             2
           </div>
-          <span className="ml-2 text-sm font-medium text-gray-900">Review</span>
+          <span className="ml-2 text-sm font-medium text-gray-900">Meals</span>
         </div>
         <div className="flex-1 h-0.5 bg-gray-200 mx-2"></div>
         <div className="flex items-center">
           <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-sm font-medium">
             3
           </div>
-          <span className="ml-2 text-sm text-gray-500">Groceries</span>
+          <span className="ml-2 text-sm text-gray-500">Events</span>
         </div>
         <div className="flex-1 h-0.5 bg-gray-200 mx-2"></div>
         <div className="flex items-center">
           <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-sm font-medium">
             4
+          </div>
+          <span className="ml-2 text-sm text-gray-500">Groceries</span>
+        </div>
+        <div className="flex-1 h-0.5 bg-gray-200 mx-2"></div>
+        <div className="flex items-center">
+          <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-sm font-medium">
+            5
           </div>
           <span className="ml-2 text-sm text-gray-500">Finalize</span>
         </div>
@@ -662,9 +740,11 @@ export default function ReviewPage() {
                 meals={meals}
                 onReplace={handleReplaceMeal}
                 onRemove={handleRemoveMeal}
+                onAssign={handleAssignUser}
                 onAddMeal={handleAddMeal}
                 replacingMealId={replacingMealId}
                 isDraggedOver={false}
+                householdMembers={householdMembers}
               />
             );
           })}
@@ -692,6 +772,18 @@ export default function ReviewPage() {
         </div>
       )}
 
+      {/* Assignment status */}
+      {!allMealsAssigned && (
+        <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-3">
+          <svg className="w-5 h-5 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <p className="text-amber-800">
+            <span className="font-medium">{unassignedMeals.length} meal{unassignedMeals.length > 1 ? "s" : ""}</span> still need{unassignedMeals.length === 1 ? "s" : ""} a cook assigned. Use the &quot;Cook&quot; dropdown on each meal.
+          </p>
+        </div>
+      )}
+
       {/* Action buttons */}
       <div className="mt-8 flex justify-between items-center">
         <Link
@@ -703,10 +795,15 @@ export default function ReviewPage() {
         </Link>
         <button
           onClick={handleContinue}
-          className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center gap-2"
+          disabled={!allMealsAssigned}
+          className={`px-6 py-2 rounded-lg transition-colors flex items-center gap-2 ${
+            allMealsAssigned
+              ? "bg-emerald-600 text-white hover:bg-emerald-700"
+              : "bg-gray-300 text-gray-500 cursor-not-allowed"
+          }`}
         >
-          Continue to Groceries
-          <span className="text-emerald-200">&rarr;</span>
+          {wizard.weekEvents.length > 0 ? "Continue to Events" : "Continue to Groceries"}
+          <span className={allMealsAssigned ? "text-emerald-200" : "text-gray-400"}>&rarr;</span>
         </button>
       </div>
     </div>

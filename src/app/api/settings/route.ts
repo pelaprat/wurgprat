@@ -55,7 +55,13 @@ export async function PUT(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { cooked_recipes_sheet_url, wishlist_recipes_sheet_url, google_calendar_id, timezone } = body;
+  const {
+    cooked_recipes_sheet_url,
+    wishlist_recipes_sheet_url,
+    google_calendar_id,
+    timezone,
+    confirm_calendar_change,
+  } = body;
 
   const supabase = getServiceSupabase();
 
@@ -79,6 +85,49 @@ export async function PUT(request: NextRequest) {
     .select("settings")
     .eq("id", user.household_id)
     .single();
+
+  const currentCalendarId = household?.settings?.google_calendar_id;
+  const calendarChanged = google_calendar_id !== undefined &&
+                          google_calendar_id !== currentCalendarId;
+
+  // If calendar is changing, require confirmation
+  if (calendarChanged && !confirm_calendar_change) {
+    // Count existing events to warn the user
+    const { count: eventCount } = await supabase
+      .from("events")
+      .select("*", { count: "exact", head: true })
+      .eq("household_id", user.household_id);
+
+    return NextResponse.json({
+      requires_confirmation: true,
+      calendar_changing: true,
+      existing_event_count: eventCount || 0,
+      message: "Changing the calendar will delete all existing events for this household.",
+    });
+  }
+
+  // If calendar is changing and confirmed, delete existing events
+  if (calendarChanged && confirm_calendar_change) {
+    console.log(`[settings] Calendar changing for household ${user.household_id}, deleting existing events`);
+
+    // First count the events
+    const { count: eventCount } = await supabase
+      .from("events")
+      .select("*", { count: "exact", head: true })
+      .eq("household_id", user.household_id);
+
+    // Then delete them
+    const { error: deleteError } = await supabase
+      .from("events")
+      .delete()
+      .eq("household_id", user.household_id);
+
+    if (deleteError) {
+      console.error("[settings] Failed to delete events:", deleteError);
+    } else {
+      console.log(`[settings] Deleted ${eventCount || 0} events`);
+    }
+  }
 
   // Merge new settings with existing
   const updatedSettings = {
@@ -111,5 +160,10 @@ export async function PUT(request: NextRequest) {
     );
   }
 
-  return NextResponse.json({ settings: updatedSettings, timezone });
+  return NextResponse.json({
+    settings: updatedSettings,
+    timezone,
+    calendar_changed: calendarChanged,
+    events_deleted: calendarChanged && confirm_calendar_change,
+  });
 }

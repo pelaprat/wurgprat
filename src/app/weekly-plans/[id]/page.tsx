@@ -12,6 +12,12 @@ interface Recipe {
   yields_leftovers?: boolean;
 }
 
+interface AssignedUser {
+  id: string;
+  name: string;
+  email: string;
+}
+
 interface Meal {
   id: string;
   day: number;
@@ -21,6 +27,20 @@ interface Meal {
   is_ai_suggested?: boolean;
   notes?: string;
   recipes?: Recipe;
+  assigned_user_id?: string;
+  assigned_user?: AssignedUser;
+  sort_order?: number;
+}
+
+interface WeekEvent {
+  id: string;
+  title: string;
+  description?: string;
+  start_time: string;
+  end_time?: string;
+  all_day: boolean;
+  location?: string;
+  assigned_users: AssignedUser[];
 }
 
 interface Ingredient {
@@ -59,12 +79,13 @@ interface WeeklyPlan {
   notes?: string;
   meals: Meal[];
   grocery_list?: GroceryList[];
+  events?: WeekEvent[];
   created_at: string;
 }
 
 const DAY_NAMES = ["Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
-type TabType = "dinner" | "grocery";
+type TabType = "dinner" | "grocery" | "events";
 
 export default function WeeklyPlanDetailPage() {
   const { data: session } = useSession();
@@ -75,7 +96,7 @@ export default function WeeklyPlanDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const tabParam = searchParams.get("tab");
-  const initialTab: TabType = tabParam === "dinner" ? "dinner" : "grocery";
+  const initialTab: TabType = tabParam === "dinner" ? "dinner" : tabParam === "events" ? "events" : "grocery";
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [updatingItems, setUpdatingItems] = useState<Set<string>>(new Set());
 
@@ -206,9 +227,9 @@ export default function WeeklyPlanDetailPage() {
   };
 
   const getMealsForDay = (day: number, mealType: string = "dinner") => {
-    return weeklyPlan?.meals.filter(
-      (m) => m.day === day && m.meal_type === mealType
-    ) || [];
+    return weeklyPlan?.meals
+      .filter((m) => m.day === day && m.meal_type === mealType)
+      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)) || [];
   };
 
   const getDateForDay = (dayIndex: number) => {
@@ -255,6 +276,30 @@ export default function WeeklyPlanDetailPage() {
 
   const checkedCount = groceryList?.grocery_items.filter((i) => i.checked).length || 0;
   const totalCount = groceryList?.grocery_items.length || 0;
+
+  const eventsCount = weeklyPlan?.events?.length || 0;
+
+  // Format date as YYYY-MM-DD in local timezone
+  const formatDateLocal = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  // Get events for a specific day
+  const getEventsForDay = (dayIndex: number) => {
+    if (!weeklyPlan?.events || !weeklyPlan.week_of) return [];
+    const weekOf = new Date(weeklyPlan.week_of + "T00:00:00");
+    const targetDate = new Date(weekOf);
+    targetDate.setDate(weekOf.getDate() + dayIndex);
+    const targetDateStr = formatDateLocal(targetDate);
+
+    return weeklyPlan.events.filter((event) => {
+      const eventDate = formatDateLocal(new Date(event.start_time));
+      return eventDate === targetDateStr;
+    });
+  };
 
   if (!session) {
     return (
@@ -343,6 +388,21 @@ export default function WeeklyPlanDetailPage() {
           >
             Dinner Plan
           </button>
+          {eventsCount > 0 && (
+            <button
+              onClick={() => setActiveTab("events")}
+              className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors flex items-center gap-2 ${
+                activeTab === "events"
+                  ? "border-emerald-500 text-emerald-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              Events
+              <span className="px-1.5 py-0.5 text-xs rounded-full bg-amber-100 text-amber-700">
+                {eventsCount}
+              </span>
+            </button>
+          )}
         </nav>
       </div>
 
@@ -447,7 +507,7 @@ export default function WeeklyPlanDetailPage() {
             </>
           )}
         </div>
-      ) : (
+      ) : activeTab === "dinner" ? (
         <div className="space-y-4">
           {/* Dinner Schedule */}
           <div className="bg-white rounded-lg shadow-sm p-4">
@@ -470,27 +530,34 @@ export default function WeeklyPlanDetailPage() {
                         {getDateForDay(index)}
                       </span>
                     </div>
-                    <div className="flex-1 space-y-1">
+                    <div className="flex-1 space-y-2">
                       {meals.length > 0 ? (
                         meals.map((meal) => (
-                          <div key={meal.id} className="flex items-center gap-2">
-                            {meal.recipes ? (
-                              <Link
-                                href={`/recipes/${meal.recipes.id}`}
-                                className="text-sm text-emerald-600 hover:text-emerald-700"
-                              >
-                                {meal.recipes.name}
-                              </Link>
-                            ) : meal.custom_meal_name ? (
-                              <span className="text-sm text-gray-700">
-                                {meal.custom_meal_name}
-                              </span>
-                            ) : (
-                              <span className="text-sm text-gray-400 italic">No meal</span>
-                            )}
-                            {meal.is_leftover && (
-                              <span className="px-1.5 py-0.5 text-xs bg-amber-100 text-amber-800 rounded">
-                                Leftovers
+                          <div key={meal.id} className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              {meal.recipes ? (
+                                <Link
+                                  href={`/recipes/${meal.recipes.id}`}
+                                  className="text-sm text-emerald-600 hover:text-emerald-700 truncate"
+                                >
+                                  {meal.recipes.name}
+                                </Link>
+                              ) : meal.custom_meal_name ? (
+                                <span className="text-sm text-gray-700 truncate">
+                                  {meal.custom_meal_name}
+                                </span>
+                              ) : (
+                                <span className="text-sm text-gray-400 italic">No meal</span>
+                              )}
+                              {meal.is_leftover && (
+                                <span className="px-1.5 py-0.5 text-xs bg-amber-100 text-amber-800 rounded flex-shrink-0">
+                                  Leftovers
+                                </span>
+                              )}
+                            </div>
+                            {meal.assigned_user && (
+                              <span className="text-xs px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded flex-shrink-0">
+                                {meal.assigned_user.name || meal.assigned_user.email}
                               </span>
                             )}
                           </div>
@@ -518,6 +585,114 @@ export default function WeeklyPlanDetailPage() {
           {/* Metadata */}
           <div className="text-xs text-gray-400">
             <p>Created: {new Date(weeklyPlan.created_at).toLocaleString()}</p>
+          </div>
+        </div>
+      ) : (
+        /* Events Tab */
+        <div className="space-y-4">
+          <div className="bg-white rounded-lg shadow-sm p-4">
+            <h2 className="text-base font-semibold text-gray-900 mb-3">
+              Events This Week
+            </h2>
+            <div className="space-y-2">
+              {DAY_NAMES.map((dayName, index) => {
+                const dayEvents = getEventsForDay(index);
+                if (dayEvents.length === 0) return null;
+
+                return (
+                  <div
+                    key={index}
+                    className="py-2 border-b border-gray-100 last:border-0"
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="font-medium text-sm text-gray-900">
+                        {dayName}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {getDateForDay(index)}
+                      </span>
+                    </div>
+                    <div className="space-y-2 pl-2">
+                      {dayEvents.map((event) => (
+                        <div
+                          key={event.id}
+                          className="bg-amber-50 border border-amber-200 rounded-lg p-3"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <svg
+                                  className="w-4 h-4 text-amber-600 flex-shrink-0"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                  />
+                                </svg>
+                                <span className="font-medium text-sm text-gray-900">
+                                  {event.title}
+                                </span>
+                              </div>
+                              <p className="text-xs text-gray-500 mt-1">
+                                {event.all_day
+                                  ? "All day"
+                                  : new Date(event.start_time).toLocaleTimeString("en-US", {
+                                      hour: "numeric",
+                                      minute: "2-digit",
+                                    })}
+                                {event.location && (
+                                  <span className="ml-2">
+                                    <span className="inline-flex items-center gap-1">
+                                      <svg
+                                        className="w-3 h-3"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                      >
+                                        <path
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          strokeWidth={2}
+                                          d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                                        />
+                                        <path
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          strokeWidth={2}
+                                          d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                                        />
+                                      </svg>
+                                      {event.location}
+                                    </span>
+                                  </span>
+                                )}
+                              </p>
+                            </div>
+                            {event.assigned_users.length > 0 && (
+                              <div className="flex flex-wrap gap-1 flex-shrink-0">
+                                {event.assigned_users.map((user) => (
+                                  <span
+                                    key={user.id}
+                                    className="text-xs px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded"
+                                  >
+                                    {user.name || user.email}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}

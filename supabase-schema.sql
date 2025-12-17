@@ -167,6 +167,7 @@ create table meals (
   is_ai_suggested boolean default false,
   notes text,
   calendar_event_id text,
+  assigned_user_id uuid references users(id),
   created_by uuid references users(id),
   created_at timestamptz default now() not null,
   sort_order integer default 0
@@ -178,6 +179,7 @@ create table meals (
 comment on column meals.day is 'Day of week (1-7, where 1 = first day of week)';
 comment on column meals.leftover_source_id is 'Which meal is this leftover from?';
 comment on column meals.is_ai_suggested is 'Whether this meal was suggested by AI vs manually selected';
+comment on column meals.assigned_user_id is 'User responsible for cooking this meal';
 
 -- Grocery List table (shopping list for a weekly plan)
 create table grocery_list (
@@ -206,6 +208,20 @@ create table grocery_items (
 
 comment on table grocery_items is 'Store and department are inherited from the ingredient';
 
+-- Weekly Plan Event Assignments table (which users are assigned to events in a weekly plan)
+-- NOTE: Multiple users can be assigned to the same event (e.g., both parents attend school play)
+create table weekly_plan_event_assignments (
+  id uuid default uuid_generate_v4() primary key,
+  weekly_plan_id uuid references weekly_plan(id) on delete cascade not null,
+  event_id uuid references events(id) on delete cascade not null,
+  user_id uuid references users(id) on delete cascade not null,
+  created_at timestamptz default now() not null,
+
+  unique(weekly_plan_id, event_id, user_id)
+);
+
+comment on table weekly_plan_event_assignments is 'Tracks which household members are assigned to events during a weekly plan';
+
 -- ============================================================================
 -- ROW LEVEL SECURITY (RLS)
 -- ============================================================================
@@ -222,6 +238,7 @@ alter table weekly_plan enable row level security;
 alter table meals enable row level security;
 alter table grocery_list enable row level security;
 alter table grocery_items enable row level security;
+alter table weekly_plan_event_assignments enable row level security;
 
 -- Helper function to get current user's household_id
 create or replace function get_user_household_id()
@@ -291,6 +308,12 @@ create policy "Users can manage grocery items" on grocery_items
     )
   );
 
+-- Weekly Plan Event Assignments: users can manage event assignments in their weekly plans
+create policy "Users can manage event assignments" on weekly_plan_event_assignments
+  for all using (
+    weekly_plan_id in (select id from weekly_plan where household_id = get_user_household_id())
+  );
+
 -- ============================================================================
 -- INDEXES
 -- ============================================================================
@@ -314,6 +337,10 @@ create index idx_grocery_items_grocery_list on grocery_items(grocery_list_id);
 create index idx_grocery_items_ingredient on grocery_items(ingredient_id);
 create index idx_events_household on events(household_id);
 create index idx_events_start_time on events(household_id, start_time);
+create index idx_meals_assigned_user on meals(assigned_user_id);
+create index idx_event_assignments_weekly_plan on weekly_plan_event_assignments(weekly_plan_id);
+create index idx_event_assignments_event on weekly_plan_event_assignments(event_id);
+create index idx_event_assignments_user on weekly_plan_event_assignments(user_id);
 
 -- ============================================================================
 -- TRIGGERS

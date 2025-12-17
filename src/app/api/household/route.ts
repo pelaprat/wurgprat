@@ -59,41 +59,64 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Create the household
-  const { data: household, error: householdError } = await supabase
+  const trimmedName = name.trim();
+
+  // Check if a household with this name already exists
+  const { data: existingHousehold } = await supabase
     .from("households")
-    .insert({
-      name: name.trim(),
-      settings: {
-        default_meal_time: "19:00",
-        week_start_day: "saturday",
-        calendar_id: "primary",
-        departments: [
-          "Produce",
-          "Meat & Seafood",
-          "Dairy",
-          "Pantry",
-          "Frozen",
-          "Bakery",
-          "Other",
-        ],
-      },
-    })
-    .select("id")
+    .select("id, name")
+    .ilike("name", trimmedName)
     .single();
 
-  if (householdError || !household) {
-    console.error("Failed to create household:", householdError);
-    return NextResponse.json(
-      { error: "Failed to create household" },
-      { status: 500 }
-    );
+  let householdId: string;
+  let joined: boolean;
+
+  if (existingHousehold) {
+    // Join the existing household
+    householdId = existingHousehold.id;
+    joined = true;
+    console.log(`User ${session.user.email} joining existing household: ${existingHousehold.name}`);
+  } else {
+    // Create a new household
+    const { data: newHousehold, error: householdError } = await supabase
+      .from("households")
+      .insert({
+        name: trimmedName,
+        settings: {
+          default_meal_time: "19:00",
+          week_start_day: "saturday",
+          calendar_id: "primary",
+          departments: [
+            "Produce",
+            "Meat & Seafood",
+            "Dairy",
+            "Pantry",
+            "Frozen",
+            "Bakery",
+            "Other",
+          ],
+        },
+      })
+      .select("id")
+      .single();
+
+    if (householdError || !newHousehold) {
+      console.error("Failed to create household:", householdError);
+      return NextResponse.json(
+        { error: "Failed to create household" },
+        { status: 500 }
+      );
+    }
+
+    householdId = newHousehold.id;
+    joined = false;
+    console.log(`User ${session.user.email} created new household: ${trimmedName}`);
   }
 
   // Assign user to the household
   const { error: updateError } = await supabase
     .from("users")
-    .update({ household_id: household.id })
+    .update({ household_id: householdId })
     .eq("id", user.id);
 
   if (updateError) {
@@ -104,5 +127,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  return NextResponse.json({ household_id: household.id });
+  return NextResponse.json({
+    household_id: householdId,
+    joined,
+    household_name: trimmedName,
+  });
 }

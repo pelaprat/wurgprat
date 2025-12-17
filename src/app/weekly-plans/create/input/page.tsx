@@ -303,7 +303,7 @@ export default function InputPage() {
           Create Weekly Meal Plan
         </h1>
         <p className="text-gray-600 mt-1">
-          Step 1 of 4: Select a week and describe your preferences
+          Step 1 of 5: Select a week and describe your preferences
         </p>
       </div>
 
@@ -313,26 +313,33 @@ export default function InputPage() {
           <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center text-sm font-medium">
             1
           </div>
-          <span className="ml-2 text-sm font-medium text-gray-900">Input</span>
+          <span className="ml-2 text-sm font-medium text-gray-900">Start</span>
         </div>
         <div className="flex-1 h-0.5 bg-gray-200 mx-2"></div>
         <div className="flex items-center">
           <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-sm font-medium">
             2
           </div>
-          <span className="ml-2 text-sm text-gray-500">Review</span>
+          <span className="ml-2 text-sm text-gray-500">Meals</span>
         </div>
         <div className="flex-1 h-0.5 bg-gray-200 mx-2"></div>
         <div className="flex items-center">
           <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-sm font-medium">
             3
           </div>
-          <span className="ml-2 text-sm text-gray-500">Groceries</span>
+          <span className="ml-2 text-sm text-gray-500">Events</span>
         </div>
         <div className="flex-1 h-0.5 bg-gray-200 mx-2"></div>
         <div className="flex items-center">
           <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-sm font-medium">
             4
+          </div>
+          <span className="ml-2 text-sm text-gray-500">Groceries</span>
+        </div>
+        <div className="flex-1 h-0.5 bg-gray-200 mx-2"></div>
+        <div className="flex items-center">
+          <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-sm font-medium">
+            5
           </div>
           <span className="ml-2 text-sm text-gray-500">Finalize</span>
         </div>

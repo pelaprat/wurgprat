@@ -39,11 +39,18 @@ export async function GET(
         is_leftover,
         is_ai_suggested,
         notes,
+        assigned_user_id,
+        sort_order,
         recipes (
           id,
           name,
           time_rating,
           yields_leftovers
+        ),
+        assigned_user:users!meals_assigned_user_id_fkey (
+          id,
+          name,
+          email
         )
       )
     `)
@@ -54,6 +61,56 @@ export async function GET(
   if (planError) {
     return NextResponse.json({ error: "Weekly plan not found" }, { status: 404 });
   }
+
+  // Fetch events for this week
+  const weekOf = new Date(weeklyPlan.week_of + "T00:00:00");
+  const weekEnd = new Date(weekOf);
+  weekEnd.setDate(weekOf.getDate() + 7);
+
+  const { data: weekEvents } = await supabase
+    .from("events")
+    .select("id, title, description, start_time, end_time, all_day, location")
+    .eq("household_id", user.household_id)
+    .gte("start_time", weekOf.toISOString())
+    .lt("start_time", weekEnd.toISOString())
+    .order("start_time");
+
+  // Fetch event assignments for this weekly plan
+  const { data: eventAssignments } = await supabase
+    .from("weekly_plan_event_assignments")
+    .select(`
+      event_id,
+      user:users (
+        id,
+        name,
+        email
+      )
+    `)
+    .eq("weekly_plan_id", params.id);
+
+  // Group event assignments by event_id
+  const eventAssignmentsMap = new Map<string, Array<{ id: string; name: string; email: string }>>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (eventAssignments || []).forEach((assignment: any) => {
+    if (!eventAssignmentsMap.has(assignment.event_id)) {
+      eventAssignmentsMap.set(assignment.event_id, []);
+    }
+    // Supabase returns single-object joins as objects, not arrays
+    const user = assignment.user;
+    if (user) {
+      eventAssignmentsMap.get(assignment.event_id)!.push({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+      });
+    }
+  });
+
+  // Attach assignments to events
+  const eventsWithAssignments = (weekEvents || []).map((event) => ({
+    ...event,
+    assigned_users: eventAssignmentsMap.get(event.id) || [],
+  }));
 
   // Fetch grocery list separately for this weekly plan
   const { data: groceryLists } = await supabase
@@ -169,6 +226,7 @@ export async function GET(
     weeklyPlan: {
       ...weeklyPlan,
       grocery_list: groceryListWithItems ? [groceryListWithItems] : [],
+      events: eventsWithAssignments,
     }
   });
 }

@@ -234,7 +234,7 @@ export default function GroceriesPage() {
         </div>
         <h1 className="text-2xl font-bold text-gray-900">Grocery List</h1>
         <p className="text-gray-600 mt-1">
-          Step 3 of 4: Review and customize your shopping list
+          Step 4 of 5: Review and customize your shopping list
         </p>
       </div>
 
@@ -250,7 +250,7 @@ export default function GroceriesPage() {
               />
             </svg>
           </div>
-          <span className="ml-2 text-sm text-emerald-600">Input</span>
+          <span className="ml-2 text-sm text-emerald-600">Start</span>
         </div>
         <div className="flex-1 h-0.5 bg-emerald-600 mx-2"></div>
         <div className="flex items-center">
@@ -263,19 +263,32 @@ export default function GroceriesPage() {
               />
             </svg>
           </div>
-          <span className="ml-2 text-sm text-emerald-600">Review</span>
+          <span className="ml-2 text-sm text-emerald-600">Meals</span>
         </div>
         <div className="flex-1 h-0.5 bg-emerald-600 mx-2"></div>
         <div className="flex items-center">
           <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center text-sm font-medium">
-            3
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path
+                fillRule="evenodd"
+                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </div>
+          <span className="ml-2 text-sm text-emerald-600">Events</span>
+        </div>
+        <div className="flex-1 h-0.5 bg-emerald-600 mx-2"></div>
+        <div className="flex items-center">
+          <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center text-sm font-medium">
+            4
           </div>
           <span className="ml-2 text-sm font-medium text-gray-900">Groceries</span>
         </div>
         <div className="flex-1 h-0.5 bg-gray-200 mx-2"></div>
         <div className="flex items-center">
           <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-sm font-medium">
-            4
+            5
           </div>
           <span className="ml-2 text-sm text-gray-500">Finalize</span>
         </div>
@@ -570,11 +583,11 @@ export default function GroceriesPage() {
       {/* Action buttons */}
       <div className="mt-8 flex justify-between items-center">
         <Link
-          href="/weekly-plans/create/review"
+          href="/weekly-plans/create/events"
           className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors flex items-center gap-2"
         >
           <span>&lt;-</span>
-          Back to Review
+          Back to Events
         </Link>
         <button
           onClick={handleContinue}

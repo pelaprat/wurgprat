@@ -107,6 +107,7 @@ export default function FinalizePage() {
           weekOf: wizard.weekOf,
           meals: wizard.proposedMeals,
           groceryItems: wizard.groceryItems.filter((i) => !i.checked),
+          eventAssignments: wizard.eventAssignments,
         }),
       });
 
@@ -196,7 +197,7 @@ export default function FinalizePage() {
         </div>
         <h1 className="text-2xl font-bold text-gray-900">Review &amp; Confirm</h1>
         <p className="text-gray-600 mt-1">
-          Step 4 of 4: Review your weekly plan and confirm
+          Step 5 of 5: Review your weekly plan and confirm
         </p>
       </div>
 
@@ -212,7 +213,7 @@ export default function FinalizePage() {
               />
             </svg>
           </div>
-          <span className="ml-2 text-sm text-emerald-600">Input</span>
+          <span className="ml-2 text-sm text-emerald-600">Start</span>
         </div>
         <div className="flex-1 h-0.5 bg-emerald-600 mx-2"></div>
         <div className="flex items-center">
@@ -225,7 +226,20 @@ export default function FinalizePage() {
               />
             </svg>
           </div>
-          <span className="ml-2 text-sm text-emerald-600">Review</span>
+          <span className="ml-2 text-sm text-emerald-600">Meals</span>
+        </div>
+        <div className="flex-1 h-0.5 bg-emerald-600 mx-2"></div>
+        <div className="flex items-center">
+          <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center text-sm font-medium">
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path
+                fillRule="evenodd"
+                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </div>
+          <span className="ml-2 text-sm text-emerald-600">Events</span>
         </div>
         <div className="flex-1 h-0.5 bg-emerald-600 mx-2"></div>
         <div className="flex items-center">
@@ -243,7 +257,7 @@ export default function FinalizePage() {
         <div className="flex-1 h-0.5 bg-emerald-600 mx-2"></div>
         <div className="flex items-center">
           <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center text-sm font-medium">
-            4
+            5
           </div>
           <span className="ml-2 text-sm font-medium text-gray-900">Finalize</span>
         </div>

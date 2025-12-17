@@ -47,12 +47,28 @@ function HomeContent() {
 
   // Memoize today's date to prevent infinite re-renders
   const [today] = useState(() => new Date());
+  const [currentTime, setCurrentTime] = useState(() => new Date());
+
+  // Update time every minute
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000); // Update every minute
+    return () => clearInterval(timer);
+  }, []);
+
   const formattedDate = today.toLocaleDateString("en-US", {
     weekday: "long",
     year: "numeric",
     month: "long",
     day: "numeric",
   });
+
+  const formattedTime = currentTime.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).toLowerCase();
 
   useEffect(() => {
     if (session && session.hasHousehold === false) {
@@ -255,7 +271,7 @@ function HomeContent() {
       {/* Today's Date Section - Hero */}
       <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 rounded-2xl shadow-lg p-8 mb-6 text-white">
         <h1 className="text-3xl font-bold mb-2">
-          {formattedDate}
+          {formattedDate}, it&apos;s {formattedTime}
         </h1>
 
         {isLoadingToday ? (

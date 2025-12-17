@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 
 interface SheetResult {
@@ -27,6 +27,13 @@ interface GoogleCalendar {
   description?: string;
   primary: boolean;
   backgroundColor?: string;
+}
+
+interface CalendarChangeConfirmation {
+  show: boolean;
+  existingEventCount: number;
+  newCalendarId: string;
+  newCalendarName: string;
 }
 
 // Common timezones grouped by region
@@ -65,9 +72,11 @@ const TIMEZONE_OPTIONS = [
 
 export default function SettingsPage() {
   const { data: session } = useSession();
+  const [householdName, setHouseholdName] = useState("");
   const [cookedRecipesUrl, setCookedRecipesUrl] = useState("");
   const [wishlistRecipesUrl, setWishlistRecipesUrl] = useState("");
   const [selectedCalendarId, setSelectedCalendarId] = useState("");
+  const [originalCalendarId, setOriginalCalendarId] = useState("");
   const [selectedTimezone, setSelectedTimezone] = useState("America/New_York");
   const [calendars, setCalendars] = useState<GoogleCalendar[]>([]);
   const [isLoadingCalendars, setIsLoadingCalendars] = useState(false);
@@ -75,6 +84,7 @@ export default function SettingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{
     type: "success" | "error";
     text: string;
@@ -84,22 +94,27 @@ export default function SettingsPage() {
     text: string;
   } | null>(null);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [calendarConfirmation, setCalendarConfirmation] = useState<CalendarChangeConfirmation>({
+    show: false,
+    existingEventCount: 0,
+    newCalendarId: "",
+    newCalendarName: "",
+  });
+  const [syncMessage, setSyncMessage] = useState<{
+    type: "success" | "error" | "info";
+    text: string;
+  } | null>(null);
 
-  useEffect(() => {
-    if (session) {
-      fetchSettings();
-      fetchCalendars();
-    }
-  }, [session]);
-
-  const fetchSettings = async () => {
+  const fetchSettings = useCallback(async () => {
     try {
       const response = await fetch("/api/settings");
       if (response.ok) {
         const data = await response.json();
+        setHouseholdName(data.name || "");
         setCookedRecipesUrl(data.settings?.cooked_recipes_sheet_url || "");
         setWishlistRecipesUrl(data.settings?.wishlist_recipes_sheet_url || "");
         setSelectedCalendarId(data.settings?.google_calendar_id || "");
+        setOriginalCalendarId(data.settings?.google_calendar_id || "");
         setSelectedTimezone(data.timezone || "America/New_York");
       }
     } catch (error) {
@@ -107,9 +122,9 @@ export default function SettingsPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const fetchCalendars = async () => {
+  const fetchCalendars = useCallback(async () => {
     setIsLoadingCalendars(true);
     setCalendarsError(null);
     try {
@@ -127,9 +142,16 @@ export default function SettingsPage() {
     } finally {
       setIsLoadingCalendars(false);
     }
-  };
+  }, []);
 
-  const handleSave = async () => {
+  useEffect(() => {
+    if (session) {
+      fetchSettings();
+      fetchCalendars();
+    }
+  }, [session, fetchSettings, fetchCalendars]);
+
+  const handleSave = async (confirmCalendarChange = false) => {
     setIsSaving(true);
     setSaveMessage(null);
 
@@ -144,16 +166,39 @@ export default function SettingsPage() {
           wishlist_recipes_sheet_url: wishlistRecipesUrl,
           google_calendar_id: selectedCalendarId,
           timezone: selectedTimezone,
+          confirm_calendar_change: confirmCalendarChange,
         }),
       });
 
+      const data = await response.json();
+
       if (response.ok) {
+        // Check if we need confirmation for calendar change
+        if (data.requires_confirmation) {
+          const calendarName = calendars.find(c => c.id === selectedCalendarId)?.summary || selectedCalendarId;
+          setCalendarConfirmation({
+            show: true,
+            existingEventCount: data.existing_event_count || 0,
+            newCalendarId: selectedCalendarId,
+            newCalendarName: calendarName,
+          });
+          setIsSaving(false);
+          return;
+        }
+
+        // Update original calendar ID after successful save
+        setOriginalCalendarId(selectedCalendarId);
+
+        let successMessage = "All settings saved successfully!";
+        if (data.calendar_changed && data.events_deleted) {
+          successMessage = "Settings saved. Previous events have been deleted. Click 'Sync Events' to import events from the new calendar.";
+        }
+
         setSaveMessage({
           type: "success",
-          text: "All settings saved successfully!",
+          text: successMessage,
         });
       } else {
-        const data = await response.json();
         setSaveMessage({
           type: "error",
           text: data.error || "Failed to save settings.",
@@ -166,6 +211,54 @@ export default function SettingsPage() {
       });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleConfirmCalendarChange = async () => {
+    setCalendarConfirmation({ ...calendarConfirmation, show: false });
+    await handleSave(true);
+  };
+
+  const handleCancelCalendarChange = () => {
+    // Revert to original calendar ID
+    setSelectedCalendarId(originalCalendarId);
+    setCalendarConfirmation({
+      show: false,
+      existingEventCount: 0,
+      newCalendarId: "",
+      newCalendarName: "",
+    });
+  };
+
+  const handleSyncEvents = async () => {
+    setIsSyncing(true);
+    setSyncMessage({ type: "info", text: "Syncing events from Google Calendar..." });
+
+    try {
+      const response = await fetch("/api/events/sync", {
+        method: "POST",
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setSyncMessage({
+          type: "success",
+          text: `Sync complete! ${data.eventsImported} imported, ${data.eventsUpdated} updated, ${data.eventsDeleted} removed.`,
+        });
+      } else {
+        setSyncMessage({
+          type: "error",
+          text: data.error || "Failed to sync events.",
+        });
+      }
+    } catch {
+      setSyncMessage({
+        type: "error",
+        text: "Failed to sync events. Please try again.",
+      });
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -239,7 +332,91 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Settings</h1>
+      {/* Calendar Change Confirmation Dialog */}
+      {calendarConfirmation.show && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-md mx-4 p-6">
+            <div className="flex items-center mb-4">
+              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mr-4">
+                <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">
+                Confirm Calendar Change
+              </h3>
+            </div>
+
+            <div className="mb-6">
+              <p className="text-gray-700 mb-3">
+                You are about to change the household calendar to:{" "}
+                <strong>{calendarConfirmation.newCalendarName}</strong>
+              </p>
+
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                <p className="text-red-800 font-medium mb-2">
+                  Warning: This action cannot be undone!
+                </p>
+                <ul className="text-red-700 text-sm space-y-1">
+                  <li>
+                    • <strong>{calendarConfirmation.existingEventCount}</strong> existing events will be permanently deleted
+                  </li>
+                  <li>• All household members will lose access to current events</li>
+                  <li>• You will need to sync events from the new calendar</li>
+                </ul>
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <p className="text-amber-800 text-sm">
+                  <strong>Note:</strong> Only calendars from your Google account are shown.
+                  Other household members will share these events, but they won&apos;t be able to
+                  sync from their own calendars without changing this setting.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={handleCancelCalendarChange}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmCalendarChange}
+                className="px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
+              >
+                Delete Events & Change Calendar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <h1 className="text-2xl font-bold text-gray-900 mb-2">
+        Household Settings
+        {householdName && (
+          <span className="text-lg font-normal text-gray-500 ml-2">
+            ({householdName})
+          </span>
+        )}
+      </h1>
+
+      {/* Household Warning Banner */}
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+        <div className="flex items-start">
+          <svg className="w-5 h-5 text-amber-600 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div>
+            <p className="text-amber-800 font-medium">These are shared household settings</p>
+            <p className="text-amber-700 text-sm mt-1">
+              Changes you make here will affect all members of your household.
+              Everyone in &quot;{householdName || "your household"}&quot; shares the same recipes, events, and preferences.
+            </p>
+          </div>
+        </div>
+      </div>
 
       {/* Section 1: Recipe Settings */}
       <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
@@ -453,14 +630,23 @@ export default function SettingsPage() {
             </svg>
           </div>
           <h2 className="text-lg font-semibold text-gray-900">
-            Google Calendar
+            Household Calendar
           </h2>
         </div>
 
-        <p className="text-gray-600 mb-6">
-          Connect a Google Calendar to view household events and add meal
-          planning events. Events will be read directly from your calendar.
+        <p className="text-gray-600 mb-4">
+          Select a Google Calendar for your household. Events from this calendar
+          will be shared with all household members and displayed on the Events page.
         </p>
+
+        {/* Calendar warning */}
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
+          <p className="text-amber-800 text-sm">
+            <strong>Important:</strong> You can only see calendars from your own Google account.
+            If you change the calendar, all existing household events will be deleted and
+            replaced with events from the new calendar.
+          </p>
+        </div>
 
         <div>
           <label
@@ -531,8 +717,8 @@ export default function SettingsPage() {
           )}
 
           <p className="mt-2 text-sm text-gray-500">
-            Events from the selected calendar will be displayed in the Events
-            page. Meal planning events will be added to this calendar.
+            Events from the selected calendar will be imported and shared with all
+            household members.
           </p>
 
           {selectedCalendarId && (
@@ -542,10 +728,82 @@ export default function SettingsPage() {
                 {calendars.find((c) => c.id === selectedCalendarId)?.summary ||
                   selectedCalendarId}
               </p>
-              <p className="text-xs text-blue-600 mt-1">
-                Calendar ID: {selectedCalendarId}
-              </p>
+              {selectedCalendarId !== originalCalendarId && originalCalendarId && (
+                <p className="text-xs text-red-600 mt-1 font-medium">
+                  ⚠️ Calendar changed - saving will delete existing events
+                </p>
+              )}
             </div>
+          )}
+        </div>
+
+        {/* Sync Events Section */}
+        <div className="mt-6 pt-6 border-t border-gray-200">
+          <h3 className="text-md font-semibold text-gray-800 mb-3">
+            Sync Events
+          </h3>
+          <p className="text-gray-600 mb-4 text-sm">
+            Import events from the selected Google Calendar into your household.
+            This will add new events, update existing ones, and remove events that
+            no longer exist in Google Calendar.
+          </p>
+
+          {syncMessage && (
+            <div
+              className={`mb-4 p-4 rounded-lg ${
+                syncMessage.type === "success"
+                  ? "bg-emerald-50 text-emerald-800"
+                  : syncMessage.type === "error"
+                  ? "bg-red-50 text-red-800"
+                  : "bg-blue-50 text-blue-800"
+              }`}
+            >
+              {syncMessage.text}
+            </div>
+          )}
+
+          <button
+            onClick={handleSyncEvents}
+            disabled={isSyncing || !selectedCalendarId}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center"
+          >
+            {isSyncing ? (
+              <>
+                <svg
+                  className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
+                </svg>
+                Syncing...
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Sync Events Now
+              </>
+            )}
+          </button>
+
+          {!selectedCalendarId && (
+            <p className="mt-2 text-sm text-gray-500">
+              Select a calendar above and save settings to enable syncing.
+            </p>
           )}
         </div>
       </div>
@@ -612,14 +870,14 @@ export default function SettingsPage() {
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-md font-semibold text-gray-800">
-              Save All Settings
+              Save Household Settings
             </h3>
             <p className="text-sm text-gray-600">
-              Save all recipe and events settings above.
+              Save all settings above. Changes will affect all household members.
             </p>
           </div>
           <button
-            onClick={handleSave}
+            onClick={() => handleSave(false)}
             disabled={isSaving}
             className="bg-emerald-600 text-white px-6 py-2 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
