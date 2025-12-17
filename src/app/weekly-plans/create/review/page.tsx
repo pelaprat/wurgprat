@@ -641,7 +641,7 @@ export default function ReviewPage() {
         </div>
         <h1 className="text-2xl font-bold text-gray-900">Review Meal Plan</h1>
         <p className="text-gray-600 mt-1">
-          Step 2 of 5: Review meals and assign who&apos;s cooking
+          Step 2 of 4: Review meals and assign who&apos;s cooking
         </p>
       </div>
 
@@ -679,13 +679,6 @@ export default function ReviewPage() {
             4
           </div>
           <span className="ml-2 text-sm text-gray-500">Groceries</span>
-        </div>
-        <div className="flex-1 h-0.5 bg-gray-200 mx-2"></div>
-        <div className="flex items-center">
-          <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-sm font-medium">
-            5
-          </div>
-          <span className="ml-2 text-sm text-gray-500">Finalize</span>
         </div>
       </div>
 

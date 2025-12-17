@@ -315,7 +315,7 @@ export default function EventsPage() {
         </div>
         <h1 className="text-2xl font-bold text-gray-900">Event Assignments</h1>
         <p className="text-gray-600 mt-1">
-          Step 3 of 5: Assign who&apos;s attending each event
+          Step 3 of 4: Assign who&apos;s responsible for each event
         </p>
       </div>
 
@@ -359,13 +359,6 @@ export default function EventsPage() {
             4
           </div>
           <span className="ml-2 text-sm text-gray-500">Groceries</span>
-        </div>
-        <div className="flex-1 h-0.5 bg-gray-200 mx-2"></div>
-        <div className="flex items-center">
-          <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-sm font-medium">
-            5
-          </div>
-          <span className="ml-2 text-sm text-gray-500">Finalize</span>
         </div>
       </div>
 

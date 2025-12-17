@@ -303,7 +303,7 @@ export default function InputPage() {
           Create Weekly Meal Plan
         </h1>
         <p className="text-gray-600 mt-1">
-          Step 1 of 5: Select a week and describe your preferences
+          Step 1 of 4: Select a week and describe your preferences
         </p>
       </div>
 
@@ -335,13 +335,6 @@ export default function InputPage() {
             4
           </div>
           <span className="ml-2 text-sm text-gray-500">Groceries</span>
-        </div>
-        <div className="flex-1 h-0.5 bg-gray-200 mx-2"></div>
-        <div className="flex items-center">
-          <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-sm font-medium">
-            5
-          </div>
-          <span className="ml-2 text-sm text-gray-500">Finalize</span>
         </div>
       </div>
 

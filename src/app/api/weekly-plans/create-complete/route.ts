@@ -11,7 +11,6 @@ interface ProposedMeal {
   customMealName?: string;
   isAiSuggested: boolean;
   assignedUserId?: string;
-  sortOrder?: number;
 }
 
 interface EventAssignment {
@@ -114,7 +113,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. Create meals
-    const mealsToInsert = meals.map((meal, index) => ({
+    const mealsToInsert = meals.map((meal) => ({
       weekly_plan_id: weeklyPlan.id,
       recipe_id: meal.recipeId || null,
       day: meal.day,
@@ -122,7 +121,6 @@ export async function POST(request: NextRequest) {
       custom_meal_name: meal.customMealName || null,
       is_ai_suggested: meal.isAiSuggested,
       assigned_user_id: meal.assignedUserId || null,
-      sort_order: meal.sortOrder ?? index,
       created_by: user.id,
     }));
 

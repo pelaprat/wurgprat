@@ -42,7 +42,9 @@ export default function GroceriesPage() {
   const wizard = useMealPlanWizard();
 
   const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
   const [stores, setStores] = useState<Store[]>([]);
   const [editingItem, setEditingItem] = useState<EditingItem | null>(null);
   const [newItemName, setNewItemName] = useState("");
@@ -184,15 +186,81 @@ export default function GroceriesPage() {
     setNewItemName("");
   };
 
-  // Handle continue
-  const handleContinue = () => {
-    router.push("/weekly-plans/create/finalize");
+  // Handle finalize - create the weekly plan
+  const handleFinalize = async () => {
+    setIsSubmitting(true);
+    setError(null);
+    wizard.setIsFinalizing(true);
+
+    try {
+      const response = await fetch("/api/weekly-plans/create-complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          weekOf: wizard.weekOf,
+          meals: wizard.proposedMeals,
+          groceryItems: wizard.groceryItems.filter((i) => !i.checked),
+          eventAssignments: wizard.eventAssignments,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to create weekly plan");
+      }
+
+      setSuccess(true);
+
+      // Reset wizard after successful creation
+      wizard.resetWizard();
+
+      // Redirect to home page with notification
+      router.push("/?notification=weekly-plan-created");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setIsSubmitting(false);
+      wizard.setIsFinalizing(false);
+    }
   };
 
   if (!session) {
     return (
       <div className="text-center py-12">
         <p className="text-gray-600">Please sign in to continue.</p>
+      </div>
+    );
+  }
+
+  // Success state - shown briefly before redirect
+  if (success) {
+    return (
+      <div className="max-w-2xl mx-auto text-center py-12">
+        <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
+          <svg
+            className="w-8 h-8 text-emerald-600"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M5 13l4 4L19 7"
+            />
+          </svg>
+        </div>
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">
+          Weekly Plan Created!
+        </h1>
+        <p className="text-gray-600 mb-4">Redirecting...</p>
+        <Link
+          href="/"
+          className="text-emerald-600 hover:text-emerald-700"
+        >
+          Go to Home
+        </Link>
       </div>
     );
   }
@@ -234,7 +302,7 @@ export default function GroceriesPage() {
         </div>
         <h1 className="text-2xl font-bold text-gray-900">Grocery List</h1>
         <p className="text-gray-600 mt-1">
-          Step 4 of 5: Review and customize your shopping list
+          Step 4 of 4: Review your shopping list and finalize your plan
         </p>
       </div>
 
@@ -284,13 +352,6 @@ export default function GroceriesPage() {
             4
           </div>
           <span className="ml-2 text-sm font-medium text-gray-900">Groceries</span>
-        </div>
-        <div className="flex-1 h-0.5 bg-gray-200 mx-2"></div>
-        <div className="flex items-center">
-          <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-sm font-medium">
-            5
-          </div>
-          <span className="ml-2 text-sm text-gray-500">Finalize</span>
         </div>
       </div>
 
@@ -580,21 +641,40 @@ export default function GroceriesPage() {
         </div>
       )}
 
+      {/* Error message */}
+      {error && (
+        <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <p className="text-red-800">{error}</p>
+        </div>
+      )}
+
       {/* Action buttons */}
       <div className="mt-8 flex justify-between items-center">
         <Link
           href="/weekly-plans/create/events"
           className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors flex items-center gap-2"
         >
-          <span>&lt;-</span>
+          <span>&larr;</span>
           Back to Events
         </Link>
         <button
-          onClick={handleContinue}
-          className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center gap-2"
+          onClick={handleFinalize}
+          disabled={isSubmitting}
+          className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         >
-          Review Final Plan
-          <span className="text-emerald-200">-&gt;</span>
+          {isSubmitting ? (
+            <>
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+              Creating Plan...
+            </>
+          ) : (
+            <>
+              Finalize Plan
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </>
+          )}
         </button>
       </div>
     </div>

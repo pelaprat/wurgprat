@@ -40,7 +40,6 @@ export async function GET(
         is_ai_suggested,
         notes,
         assigned_user_id,
-        sort_order,
         recipes (
           id,
           name,
