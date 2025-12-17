@@ -216,11 +216,15 @@ export async function addMealToCalendar(
 }
 
 function getMealTime(date: string, mealType: string): Date {
-  const d = new Date(date);
+  // Parse date string as local date (not UTC) by splitting components
+  // This avoids the timezone shift that occurs with new Date("YYYY-MM-DD")
+  const [year, month, day] = date.split("-").map(Number);
+  const d = new Date(year, month - 1, day); // month is 0-indexed
+
   const hours: Record<string, number> = {
     breakfast: 8,
     lunch: 12,
-    dinner: 18,
+    dinner: 19,
     snack: 15,
   };
   d.setHours(hours[mealType] || 12, 0, 0, 0);
@@ -242,9 +246,10 @@ export async function createMealCalendarEvent(
 ): Promise<string | null> {
   const { mealId, date, mealType, mealName, assignedUserName, timezone } = options;
 
-  // Build the title: "Dinner: Spaghetti (Chef: John)"
-  const mealTypeCapitalized = mealType.charAt(0).toUpperCase() + mealType.slice(1);
-  let title = `${mealTypeCapitalized}: ${mealName}`;
+  // Build the title: "Spaghetti (Chef: John)" for dinner, "Breakfast: Pancakes" for others
+  let title = mealType === "dinner"
+    ? mealName
+    : `${mealType.charAt(0).toUpperCase() + mealType.slice(1)}: ${mealName}`;
   if (assignedUserName) {
     title += ` (Chef: ${assignedUserName})`;
   }
@@ -291,9 +296,10 @@ export async function updateMealCalendarEvent(
 ): Promise<boolean> {
   const { mealId, mealName, mealType, assignedUserName } = options;
 
-  // Build the title: "Dinner: Spaghetti (Chef: John)"
-  const mealTypeCapitalized = mealType.charAt(0).toUpperCase() + mealType.slice(1);
-  let title = `${mealTypeCapitalized}: ${mealName}`;
+  // Build the title: "Spaghetti (Chef: John)" for dinner, "Breakfast: Pancakes" for others
+  let title = mealType === "dinner"
+    ? mealName
+    : `${mealType.charAt(0).toUpperCase() + mealType.slice(1)}: ${mealName}`;
   if (assignedUserName) {
     title += ` (Chef: ${assignedUserName})`;
   }
