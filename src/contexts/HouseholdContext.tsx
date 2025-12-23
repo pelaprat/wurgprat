@@ -9,6 +9,7 @@ import {
   ReactNode,
 } from "react";
 import { useSession } from "next-auth/react";
+import { getBrowserTimezone } from "@/constants/timezones";
 
 interface HouseholdContextType {
   name: string | null;
@@ -23,7 +24,8 @@ const HouseholdContext = createContext<HouseholdContextType | undefined>(undefin
 export function HouseholdProvider({ children }: { children: ReactNode }) {
   const { data: session, status } = useSession();
   const [name, setName] = useState<string | null>(null);
-  const [timezone, setTimezone] = useState<string>("America/New_York");
+  // Use browser's timezone as the default instead of hardcoded US timezone
+  const [timezone, setTimezone] = useState<string>(() => getBrowserTimezone());
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,7 +40,8 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
       if (response.ok) {
         const data = await response.json();
         setName(data.name || null);
-        setTimezone(data.timezone || "America/New_York");
+        // Fall back to browser timezone if none is configured
+        setTimezone(data.timezone || getBrowserTimezone());
       } else {
         const data = await response.json();
         setError(data.error || "Failed to fetch household");

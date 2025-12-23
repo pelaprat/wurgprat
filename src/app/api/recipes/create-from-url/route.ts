@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { getServiceSupabase } from "@/lib/supabase";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { renderPrompt } from "@/prompts";
+import { validateExternalUrl, fetchWithTimeout } from "@/utils/url";
 
 interface ExtractedIngredient {
   name: string;
@@ -22,13 +23,19 @@ interface ExtractedRecipe {
 
 // Fetch a webpage and extract its text content
 async function fetchWebPage(url: string): Promise<string> {
-  const response = await fetch(url, {
+  // Validate URL to prevent SSRF attacks
+  const validation = validateExternalUrl(url);
+  if (!validation.valid) {
+    throw new Error(validation.error || "Invalid URL");
+  }
+
+  const response = await fetchWithTimeout(url, {
     headers: {
       "User-Agent":
         "Mozilla/5.0 (compatible; MealPlannerBot/1.0; +https://mealplanner.app)",
       "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     },
-  });
+  }, 30000);
 
   if (!response.ok) {
     throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);

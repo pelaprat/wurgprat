@@ -8,22 +8,7 @@ import {
   useMealPlanWizard,
   GroceryItemDraft,
 } from "@/contexts/MealPlanWizardContext";
-
-// Department order for display
-const DEPARTMENT_ORDER = [
-  "Produce",
-  "Meat & Seafood",
-  "Dairy",
-  "Bakery",
-  "Frozen",
-  "Pantry",
-  "Canned Goods",
-  "Condiments",
-  "Spices",
-  "Beverages",
-  "Snacks",
-  "Other",
-];
+import { DEPARTMENT_ORDER, getDepartmentSortIndex } from "@/constants/grocery";
 
 interface Store {
   id: string;
@@ -125,10 +110,8 @@ export default function GroceriesPage() {
         return a.ingredientName.localeCompare(b.ingredientName);
       } else {
         // Default: sort by department
-        const aIndex = DEPARTMENT_ORDER.indexOf(a.department || "Other");
-        const bIndex = DEPARTMENT_ORDER.indexOf(b.department || "Other");
-        const aDeptOrder = aIndex === -1 ? 999 : aIndex;
-        const bDeptOrder = bIndex === -1 ? 999 : bIndex;
+        const aDeptOrder = getDepartmentSortIndex(a.department);
+        const bDeptOrder = getDepartmentSortIndex(b.department);
         if (aDeptOrder !== bDeptOrder) return aDeptOrder - bDeptOrder;
         return a.ingredientName.localeCompare(b.ingredientName);
       }

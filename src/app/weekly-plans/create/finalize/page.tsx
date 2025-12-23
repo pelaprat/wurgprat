@@ -5,42 +5,9 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useMealPlanWizard, ProposedMeal } from "@/contexts/MealPlanWizardContext";
-
-const DAY_NAMES = [
-  "Sat",
-  "Sun",
-  "Mon",
-  "Tue",
-  "Wed",
-  "Thu",
-  "Fri",
-];
-
-const DAY_NAMES_FULL = [
-  "Saturday",
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-];
-
-const TIME_RATING_LABELS: Record<number, string> = {
-  1: "Very Quick",
-  2: "Quick",
-  3: "Medium",
-  4: "Long",
-  5: "Very Long",
-};
-
-const TIME_RATING_COLORS: Record<number, string> = {
-  1: "bg-green-100 text-green-800",
-  2: "bg-green-100 text-green-800",
-  3: "bg-yellow-100 text-yellow-800",
-  4: "bg-red-100 text-red-800",
-  5: "bg-red-100 text-red-800",
-};
+import { formatDateLocal } from "@/utils/dates";
+import { DAY_NAMES_SHORT, DAY_NAMES } from "@/constants/calendar";
+import { TIME_RATING_LABELS, TIME_RATING_COLORS } from "@/constants/recipes";
 
 export default function FinalizePage() {
   const { data: session } = useSession();
@@ -67,22 +34,19 @@ export default function FinalizePage() {
   };
 
   // Get dates for the week
-  const getWeekDates = (): string[] => {
+  const getWeekDateStrings = (): string[] => {
     if (!wizard.weekOf) return [];
     const start = new Date(wizard.weekOf + "T00:00:00");
     const dates: string[] = [];
     for (let i = 0; i < 7; i++) {
       const date = new Date(start);
       date.setDate(start.getDate() + i);
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, "0");
-      const day = String(date.getDate()).padStart(2, "0");
-      dates.push(`${year}-${month}-${day}`);
+      dates.push(formatDateLocal(date));
     }
     return dates;
   };
 
-  const weekDates = getWeekDates();
+  const weekDates = getWeekDateStrings();
 
   // Sorted grocery items (unchecked only)
   const sortedGroceryItems = useMemo(() => {

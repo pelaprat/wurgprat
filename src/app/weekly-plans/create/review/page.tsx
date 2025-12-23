@@ -19,16 +19,9 @@ import {
 } from "@dnd-kit/core";
 import { useMealPlanWizard, ProposedMeal } from "@/contexts/MealPlanWizardContext";
 import { Event } from "@/contexts/EventsContext";
-
-const DAY_NAMES = [
-  "Saturday",
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-];
+import { formatDateLocal } from "@/utils/dates";
+import { DAY_NAMES } from "@/constants/calendar";
+import { TIME_RATING_LABELS, TIME_RATING_COLORS } from "@/constants/recipes";
 
 interface HouseholdMember {
   id: string;
@@ -36,22 +29,6 @@ interface HouseholdMember {
   email: string;
   picture?: string;
 }
-
-// Format date as YYYY-MM-DD in local timezone (not UTC)
-function formatDateLocal(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-const TIME_RATING_LABELS: Record<number, { label: string; color: string }> = {
-  1: { label: "Very Quick", color: "bg-green-100 text-green-800" },
-  2: { label: "Quick", color: "bg-green-100 text-green-800" },
-  3: { label: "Medium", color: "bg-yellow-100 text-yellow-800" },
-  4: { label: "Long", color: "bg-red-100 text-red-800" },
-  5: { label: "Very Long", color: "bg-red-100 text-red-800" },
-};
 
 interface DraggableMealProps {
   meal: ProposedMeal;
@@ -70,7 +47,7 @@ function DraggableMeal({ meal, onReplace, onRemove, onAssign, isReplacing, canRe
   });
 
   const timeRating = meal.recipeTimeRating
-    ? TIME_RATING_LABELS[meal.recipeTimeRating]
+    ? { label: TIME_RATING_LABELS[meal.recipeTimeRating], color: TIME_RATING_COLORS[meal.recipeTimeRating] }
     : null;
 
   return (
@@ -196,7 +173,7 @@ function DraggableMeal({ meal, onReplace, onRemove, onAssign, isReplacing, canRe
 
 function MealDragOverlay({ meal }: { meal: ProposedMeal }) {
   const timeRating = meal.recipeTimeRating
-    ? TIME_RATING_LABELS[meal.recipeTimeRating]
+    ? { label: TIME_RATING_LABELS[meal.recipeTimeRating], color: TIME_RATING_COLORS[meal.recipeTimeRating] }
     : null;
 
   return (

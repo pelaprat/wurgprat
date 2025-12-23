@@ -1,4 +1,5 @@
 import { google } from "googleapis";
+import { validateIcsUrl, fetchWithTimeout } from "@/utils/url";
 
 // Special identifier to mark meal events in Google Calendar
 // This is used to skip importing these events back as "events" in our app
@@ -383,7 +384,13 @@ function parseIcsDate(dateStr: string): { date: Date; allDay: boolean } {
 
 // Fetch and parse an ICS calendar file
 export async function fetchIcsCalendar(icsUrl: string): Promise<CalendarEvent[]> {
-  const response = await fetch(icsUrl);
+  // Validate URL to prevent SSRF attacks
+  const validation = validateIcsUrl(icsUrl);
+  if (!validation.valid) {
+    throw new Error(validation.error || "Invalid calendar URL");
+  }
+
+  const response = await fetchWithTimeout(icsUrl, {}, 30000);
 
   if (!response.ok) {
     throw new Error(`Failed to fetch ICS file: ${response.status}`);

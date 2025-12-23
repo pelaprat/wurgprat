@@ -5,6 +5,7 @@ import { getServiceSupabase } from "@/lib/supabase";
 import { readGoogleSheet, extractSpreadsheetId, extractGid } from "@/lib/google";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { renderPrompt } from "@/prompts";
+import { validateExternalUrl, validateGoogleSheetsUrl, fetchWithTimeout } from "@/utils/url";
 
 interface SheetRow {
   name: string;
@@ -71,12 +72,19 @@ function parseSheetRow(row: string[], headers: string[]): SheetRow | null {
 // Fetch a webpage and extract its text content
 async function fetchWebPage(url: string): Promise<string> {
   try {
-    const response = await fetch(url, {
+    // Validate URL to prevent SSRF attacks
+    const validation = validateExternalUrl(url);
+    if (!validation.valid) {
+      console.error(`Invalid URL blocked: ${url} - ${validation.error}`);
+      return "";
+    }
+
+    const response = await fetchWithTimeout(url, {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (compatible; MealPlannerBot/1.0; +https://mealplanner.app)",
       },
-    });
+    }, 30000);
 
     if (!response.ok) {
       throw new Error(`Failed to fetch: ${response.status}`);
@@ -229,7 +237,15 @@ export async function POST() {
       skippedReasons: [],
     };
 
-    const spreadsheetId = extractSpreadsheetId(url);
+    // Validate Google Sheets URL to prevent SSRF
+    const sheetsValidation = validateGoogleSheetsUrl(url);
+    if (!sheetsValidation.valid) {
+      result.error = sheetsValidation.error || "Invalid Google Sheets URL";
+      sheetResults.push(result);
+      continue;
+    }
+
+    const spreadsheetId = sheetsValidation.spreadsheetId || extractSpreadsheetId(url);
     if (!spreadsheetId) {
       result.error = "Could not extract spreadsheet ID from URL";
       sheetResults.push(result);

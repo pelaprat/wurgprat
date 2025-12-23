@@ -6,30 +6,14 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useMealPlanWizard } from "@/contexts/MealPlanWizardContext";
 import { Event } from "@/contexts/EventsContext";
-
-const DAY_NAMES = [
-  "Saturday",
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-];
+import { formatDateLocal } from "@/utils/dates";
+import { DAY_NAMES } from "@/constants/calendar";
 
 interface HouseholdMember {
   id: string;
   name: string;
   email: string;
   picture?: string;
-}
-
-// Format date as YYYY-MM-DD in local timezone (not UTC)
-function formatDateLocal(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
 }
 
 interface EventCardProps {

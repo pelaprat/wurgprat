@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { DAY_NAMES } from "@/constants/calendar";
 
 interface Recipe {
   id: string;
@@ -88,8 +89,6 @@ interface WeeklyPlan {
   events?: WeekEvent[];
   created_at: string;
 }
-
-const DAY_NAMES = ["Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
 type TabType = "dinner" | "grocery" | "events";
 

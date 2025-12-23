@@ -3,6 +3,34 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getServiceSupabase } from "@/lib/supabase";
 
+/**
+ * Get today's date in a specific timezone as YYYY-MM-DD
+ */
+function getTodayInTimezone(timezone: string): string {
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  return formatter.format(now); // Returns YYYY-MM-DD format
+}
+
+/**
+ * Get start and end of day in a specific timezone
+ */
+function getDayBoundsInTimezone(timezone: string): { start: Date; end: Date; todayStr: string } {
+  const todayStr = getTodayInTimezone(timezone);
+
+  // Create dates that represent midnight in the target timezone
+  // By creating dates from the formatted string, we get the correct day boundaries
+  const start = new Date(`${todayStr}T00:00:00`);
+  const end = new Date(`${todayStr}T23:59:59.999`);
+
+  return { start, end, todayStr };
+}
+
 export async function GET() {
   const session = await getServerSession(authOptions);
 
@@ -23,13 +51,17 @@ export async function GET() {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  // Calculate today's date range
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
+  // Get household timezone setting
+  const { data: household } = await supabase
+    .from("households")
+    .select("timezone")
+    .eq("id", user.household_id)
+    .single();
 
-  const todayStr = today.toISOString().split("T")[0];
+  const householdTimezone = household?.timezone || "America/New_York";
+
+  // Calculate today's date range in household timezone
+  const { start: today, end: tomorrow, todayStr } = getDayBoundsInTimezone(householdTimezone);
 
   // Find the weekly plan that contains today
   const { data: weeklyPlans, error: plansError } = await supabase

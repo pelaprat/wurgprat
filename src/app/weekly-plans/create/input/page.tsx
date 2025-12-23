@@ -6,6 +6,9 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useMealPlanWizard } from "@/contexts/MealPlanWizardContext";
 import { useEvents, Event } from "@/contexts/EventsContext";
+import { formatDateLocal, getWeekDates, getSaturdayOptions, getNextSaturday } from "@/utils/dates";
+import { DAY_NAMES } from "@/constants/calendar";
+import { TIME_RATING_LABELS } from "@/constants/recipes";
 
 interface Recipe {
   id: string;
@@ -25,18 +28,6 @@ interface ExistingPlan {
   week_of: string;
 }
 
-// Get dates for a week starting from a Saturday
-function getWeekDates(saturdayDate: string): Date[] {
-  const start = new Date(saturdayDate + "T00:00:00");
-  const dates: Date[] = [];
-  for (let i = 0; i < 7; i++) {
-    const date = new Date(start);
-    date.setDate(start.getDate() + i);
-    dates.push(date);
-  }
-  return dates;
-}
-
 // Filter events for a specific week
 function getEventsForWeek(events: Event[], weekOf: string): Event[] {
   const weekDates = getWeekDates(weekOf);
@@ -48,50 +39,6 @@ function getEventsForWeek(events: Event[], weekOf: string): Event[] {
     const eventDate = new Date(event.start_time);
     return eventDate >= startOfWeek && eventDate <= endOfWeek;
   });
-}
-
-// Get last Saturday and next several Saturdays
-function getSaturdayOptions(): string[] {
-  const today = new Date();
-  const dayOfWeek = today.getDay(); // 0 = Sunday, 6 = Saturday
-
-  // Calculate days since last Saturday
-  // If today is Saturday (6), we want to go back 7 days to get "last" Saturday
-  // If today is Sunday (0), we want to go back 1 day
-  // If today is Monday (1), we want to go back 2 days, etc.
-  const daysToLastSaturday = dayOfWeek === 6 ? 7 : dayOfWeek + 1;
-
-  const lastSaturday = new Date(today);
-  lastSaturday.setDate(today.getDate() - daysToLastSaturday);
-
-  const saturdays: string[] = [];
-
-  // Start from last Saturday, add 8 weeks of Saturdays
-  for (let i = 0; i < 8; i++) {
-    const saturday = new Date(lastSaturday);
-    saturday.setDate(lastSaturday.getDate() + (i * 7));
-    // Use local date formatting to avoid timezone issues
-    saturdays.push(formatDateLocal(saturday));
-  }
-
-  return saturdays;
-}
-
-// Get next Saturday (default selection)
-function getNextSaturday(): string {
-  const today = new Date();
-  const dayOfWeek = today.getDay(); // 0 = Sunday, 6 = Saturday
-
-  // Calculate days until next Saturday
-  // If today is Saturday, return next Saturday (7 days)
-  // If today is Sunday (0), next Saturday is 6 days away
-  // If today is Monday (1), next Saturday is 5 days away, etc.
-  const daysUntilSaturday = dayOfWeek === 6 ? 7 : (6 - dayOfWeek + 7) % 7;
-
-  const nextSaturday = new Date(today);
-  nextSaturday.setDate(today.getDate() + daysUntilSaturday);
-  // Use local date formatting to avoid timezone issues
-  return formatDateLocal(nextSaturday);
 }
 
 // Format Saturday option for display
@@ -106,24 +53,6 @@ function formatSaturdayOption(dateStr: string, existingPlans: ExistingPlan[]): s
 
   return hasPlan ? `${label} (Plan exists)` : label;
 }
-
-const DAY_NAMES = ["Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
-
-// Format date as YYYY-MM-DD in local timezone (not UTC)
-function formatDateLocal(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-const TIME_RATING_LABELS: Record<number, string> = {
-  1: "Very Quick",
-  2: "Quick",
-  3: "Medium",
-  4: "Long",
-  5: "Very Long",
-};
 
 export default function InputPage() {
   const { data: session } = useSession();

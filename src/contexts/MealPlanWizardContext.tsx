@@ -8,6 +8,7 @@ import {
   ReactNode,
 } from "react";
 import { Event } from "./EventsContext";
+import { getNextSaturday } from "@/utils/dates";
 
 // Types for the wizard
 export interface ProposedMeal {
@@ -120,16 +121,6 @@ interface MealPlanWizardContextType extends MealPlanWizardState {
 const MealPlanWizardContext = createContext<
   MealPlanWizardContextType | undefined
 >(undefined);
-
-// Get next Saturday date
-function getNextSaturday(): string {
-  const today = new Date();
-  const dayOfWeek = today.getDay();
-  const daysUntilSaturday = (6 - dayOfWeek + 7) % 7 || 7; // 0 means today is Saturday, so go to next week
-  const nextSaturday = new Date(today);
-  nextSaturday.setDate(today.getDate() + daysUntilSaturday);
-  return nextSaturday.toISOString().split("T")[0];
-}
 
 const initialState: MealPlanWizardState = {
   weekOf: getNextSaturday(),

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
+import { formatWeekRange, isCurrentWeek } from "@/utils/dates";
 
 interface Meal {
   id: string;
@@ -51,30 +52,6 @@ export default function WeeklyPlansPage() {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const formatWeekOf = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const endDate = new Date(date);
-    endDate.setDate(date.getDate() + 6);
-
-    return `${date.toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-    })} - ${endDate.toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    })}`;
-  };
-
-  const isCurrentWeek = (dateStr: string) => {
-    const weekOf = new Date(dateStr);
-    const today = new Date();
-    const endDate = new Date(weekOf);
-    endDate.setDate(weekOf.getDate() + 6);
-
-    return today >= weekOf && today <= endDate;
   };
 
   const getMealCount = (plan: WeeklyPlan) => {
@@ -149,7 +126,7 @@ export default function WeeklyPlansPage() {
                       href={`/weekly-plans/${plan.id}`}
                       className="text-emerald-600 hover:text-emerald-700 font-medium"
                     >
-                      {formatWeekOf(plan.week_of)}
+                      {formatWeekRange(plan.week_of)}
                     </Link>
                     {isCurrentWeek(plan.week_of) && (
                       <span className="ml-2 px-2 py-0.5 text-xs bg-emerald-100 text-emerald-800 rounded">
