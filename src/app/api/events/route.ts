@@ -52,10 +52,18 @@ export async function GET(request: NextRequest) {
     const timeMax = new Date();
     timeMax.setDate(timeMax.getDate() + daysAhead);
 
-    // Fetch events from database (shared across household)
+    // Fetch events from database (shared across household) with weekly plans
     const { data: events, error: eventsError } = await supabase
       .from("events")
-      .select("*")
+      .select(`
+        *,
+        weekly_plan_assignments:weekly_plan_event_assignments (
+          weekly_plan:weekly_plan_id (
+            id,
+            week_of
+          )
+        )
+      `)
       .eq("household_id", user.household_id)
       .gte("start_time", timeMin.toISOString())
       .lte("start_time", timeMax.toISOString())

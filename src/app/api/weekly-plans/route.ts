@@ -35,6 +35,10 @@ export async function GET(request: NextRequest) {
           id,
           name
         )
+      ),
+      event_assignments:weekly_plan_event_assignments (
+        id,
+        event_id
       )
     `)
     .eq("household_id", user.household_id)

@@ -479,39 +479,24 @@ export default function RecipeDetailPage() {
         >
           &larr; Back to recipes
         </Link>
-        <div className="flex justify-between items-start">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">{recipe.name}</h1>
-            {recipe.source && (
-              <p className="text-gray-600">
-                {recipe.source_url ? (
-                  <a
-                    href={recipe.source_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-emerald-600 hover:text-emerald-700"
-                  >
-                    {recipe.source} &rarr;
-                  </a>
-                ) : (
-                  recipe.source
-                )}
-              </p>
-            )}
-          </div>
-          <div className="flex space-x-2">
-            <span
-              className={`px-3 py-1 text-sm rounded-full ${
-                recipe.status === "made"
-                  ? "bg-emerald-100 text-emerald-800"
-                  : recipe.status === "wishlist"
-                  ? "bg-amber-100 text-amber-800"
-                  : "bg-gray-100 text-gray-800"
-              }`}
-            >
-              {recipe.status}
-            </span>
-          </div>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">{recipe.name}</h1>
+          {recipe.source && (
+            <p className="text-gray-600">
+              {recipe.source_url ? (
+                <a
+                  href={recipe.source_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-emerald-600 hover:text-emerald-700"
+                >
+                  {recipe.source} &rarr;
+                </a>
+              ) : (
+                recipe.source
+              )}
+            </p>
+          )}
         </div>
       </div>
 

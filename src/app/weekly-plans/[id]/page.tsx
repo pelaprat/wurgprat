@@ -93,6 +93,31 @@ const DAY_NAMES = ["Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thur
 
 type TabType = "dinner" | "grocery" | "events";
 
+// iCal-style date icon component
+function DateIcon({ dayIndex, weekOf, isHighlighted = false }: { dayIndex: number; weekOf: string; isHighlighted?: boolean }) {
+  const date = new Date(weekOf + "T00:00:00");
+  date.setDate(date.getDate() + dayIndex);
+  const month = date.toLocaleDateString(undefined, { month: "short" }).toUpperCase();
+  const day = date.getDate();
+
+  return (
+    <div className={`w-14 h-14 flex flex-col items-center justify-center rounded-lg overflow-hidden shadow-sm border ${
+      isHighlighted ? "border-emerald-400" : "border-gray-200"
+    }`}>
+      <div className={`w-full text-center text-[10px] font-bold py-0.5 ${
+        isHighlighted ? "bg-emerald-500 text-white" : "bg-red-500 text-white"
+      }`}>
+        {month}
+      </div>
+      <div className={`flex-1 w-full flex items-center justify-center text-xl font-bold ${
+        isHighlighted ? "bg-emerald-50 text-emerald-700" : "bg-white text-gray-900"
+      }`}>
+        {day}
+      </div>
+    </div>
+  );
+}
+
 // Assignee Dropdown Component
 function AssigneeDropdown({
   currentAssignee,
@@ -118,13 +143,6 @@ function AssigneeDropdown({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const getInitials = (name: string | undefined, email: string) => {
-    if (name) {
-      return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
-    }
-    return email[0].toUpperCase();
-  };
-
   return (
     <div className="relative" ref={dropdownRef}>
       <button
@@ -135,12 +153,7 @@ function AssigneeDropdown({
         } ${currentAssignee ? "bg-emerald-50 text-emerald-700" : "bg-gray-100 text-gray-500"}`}
       >
         {currentAssignee ? (
-          <>
-            <span className="w-5 h-5 rounded-full bg-emerald-200 text-emerald-800 text-xs font-medium flex items-center justify-center">
-              {getInitials(currentAssignee.name, currentAssignee.email)}
-            </span>
-            <span className="font-medium">{currentAssignee.name || currentAssignee.email.split("@")[0]}</span>
-          </>
+          <span className="font-medium">{currentAssignee.name || currentAssignee.email.split("@")[0]}</span>
         ) : (
           <>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -175,9 +188,6 @@ function AssigneeDropdown({
                 currentAssignee?.id === member.id ? "bg-emerald-50 text-emerald-700" : "text-gray-700"
               }`}
             >
-              <span className="w-6 h-6 rounded-full bg-gray-200 text-gray-600 text-xs font-medium flex items-center justify-center">
-                {getInitials(member.name, member.email)}
-              </span>
               <span>{member.name || member.email.split("@")[0]}</span>
               {currentAssignee?.id === member.id && (
                 <svg className="w-4 h-4 ml-auto text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
@@ -218,13 +228,6 @@ function MultiAssigneeDropdown({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const getInitials = (name: string | undefined, email: string) => {
-    if (name) {
-      return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
-    }
-    return email[0].toUpperCase();
-  };
-
   const toggleUser = (userId: string) => {
     const newIds = assignedIds.has(userId)
       ? Array.from(assignedIds).filter((id) => id !== userId)
@@ -242,22 +245,9 @@ function MultiAssigneeDropdown({
         } ${assignedUsers.length > 0 ? "bg-emerald-50" : "bg-gray-100"}`}
       >
         {assignedUsers.length > 0 ? (
-          <div className="flex items-center">
-            <div className="flex -space-x-1.5">
-              {assignedUsers.slice(0, 3).map((user) => (
-                <span
-                  key={user.id}
-                  className="w-5 h-5 rounded-full bg-emerald-200 text-emerald-800 text-xs font-medium flex items-center justify-center ring-2 ring-white"
-                  title={user.name || user.email}
-                >
-                  {getInitials(user.name, user.email)}
-                </span>
-              ))}
-            </div>
-            {assignedUsers.length > 3 && (
-              <span className="ml-1 text-xs text-emerald-700">+{assignedUsers.length - 3}</span>
-            )}
-          </div>
+          <span className="text-emerald-700 font-medium">
+            {assignedUsers.map((u) => u.name || u.email.split("@")[0]).join(", ")}
+          </span>
         ) : (
           <span className="text-gray-500 flex items-center gap-1">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -292,9 +282,6 @@ function MultiAssigneeDropdown({
                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
                   )}
-                </span>
-                <span className="w-6 h-6 rounded-full bg-gray-200 text-gray-600 text-xs font-medium flex items-center justify-center">
-                  {getInitials(member.name, member.email)}
                 </span>
                 <span className={isAssigned ? "text-emerald-700 font-medium" : "text-gray-700"}>
                   {member.name || member.email.split("@")[0]}
@@ -626,6 +613,8 @@ export default function WeeklyPlanDetailPage() {
 
   const eventsCount = weeklyPlan?.events?.length || 0;
 
+  const dinnerCount = weeklyPlan?.meals?.filter((m) => m.meal_type === "dinner" && (m.recipes || m.custom_meal_name)).length || 0;
+
   const formatDateLocal = (date: Date): string => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -734,7 +723,10 @@ export default function WeeklyPlanDetailPage() {
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
             </svg>
-            Dinner Plan
+            Dinner Plans
+            <span className="px-2 py-0.5 text-xs rounded-full font-medium bg-gray-100 text-gray-600">
+              {dinnerCount}
+            </span>
           </button>
           {eventsCount > 0 && (
             <button
@@ -864,7 +856,7 @@ export default function WeeklyPlanDetailPage() {
           )}
         </div>
       ) : activeTab === "dinner" ? (
-        /* Dinner Plan Tab - Table Layout */
+        /* Dinner Plans Tab - 3-column Table Layout */
         <div className="space-y-4">
           <div className="bg-white rounded-xl shadow-sm overflow-hidden">
             <div className="divide-y divide-gray-100">
@@ -875,64 +867,65 @@ export default function WeeklyPlanDetailPage() {
                 return (
                   <div
                     key={index}
-                    className={`flex ${today ? "bg-emerald-50" : "hover:bg-gray-50"} transition-colors`}
+                    className={`flex items-center gap-4 p-4 ${today ? "bg-emerald-50" : "hover:bg-gray-50"} transition-colors`}
                   >
-                    {/* Date Column */}
-                    <div className={`w-32 flex-shrink-0 p-4 border-r border-gray-100 ${today ? "bg-emerald-100" : "bg-gray-50"}`}>
-                      <div className={`text-sm font-semibold ${today ? "text-emerald-700" : "text-gray-900"}`}>
-                        {dayName}
-                        {today && (
-                          <span className="block text-xs font-medium text-emerald-600 mt-0.5">Today</span>
-                        )}
-                      </div>
-                      <div className={`text-xs mt-1 ${today ? "text-emerald-600" : "text-gray-500"}`}>
-                        {getDateForDay(index)}
-                      </div>
+                    {/* Date Column - iCal Style */}
+                    <div className="flex-shrink-0">
+                      <DateIcon dayIndex={index} weekOf={weeklyPlan.week_of} isHighlighted={today} />
                     </div>
 
-                    {/* Meals Column */}
-                    <div className="flex-1 p-4">
+                    {/* Day Name & Meals Column */}
+                    <div className="flex-1 min-w-0">
+                      <div className={`text-sm font-semibold mb-1 ${today ? "text-emerald-700" : "text-gray-700"}`}>
+                        {dayName}
+                        {today && <span className="ml-2 text-xs font-medium bg-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full">Today</span>}
+                      </div>
                       {meals.length > 0 ? (
-                        <div className="space-y-2">
+                        <div className="space-y-1">
                           {meals.map((meal) => (
-                            <div
-                              key={meal.id}
-                              className="flex items-center justify-between gap-3"
-                            >
-                              <div className="flex items-center gap-2 min-w-0 flex-1">
-                                {meal.recipes ? (
-                                  <Link
-                                    href={`/recipes/${meal.recipes.id}`}
-                                    className="font-medium text-gray-900 hover:text-emerald-600 transition-colors truncate"
-                                  >
-                                    {meal.recipes.name}
-                                  </Link>
-                                ) : meal.custom_meal_name ? (
-                                  <span className="font-medium text-gray-900 truncate">
-                                    {meal.custom_meal_name}
-                                  </span>
-                                ) : (
-                                  <span className="text-gray-400 italic">No meal</span>
-                                )}
-                                {meal.is_leftover && (
-                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700 flex-shrink-0">
-                                    Leftovers
-                                  </span>
-                                )}
-                              </div>
-
-                              <AssigneeDropdown
-                                currentAssignee={meal.assigned_user}
-                                members={householdMembers}
-                                onSelect={(userId) => handleMealAssigneeChange(meal.id, userId)}
-                                isUpdating={updatingMeals.has(meal.id)}
-                              />
+                            <div key={meal.id} className="flex items-center gap-2">
+                              {meal.recipes ? (
+                                <Link
+                                  href={`/recipes/${meal.recipes.id}`}
+                                  className="font-medium text-gray-900 hover:text-emerald-600 transition-colors truncate"
+                                >
+                                  {meal.recipes.name}
+                                </Link>
+                              ) : meal.custom_meal_name ? (
+                                <span className="font-medium text-gray-900 truncate">
+                                  {meal.custom_meal_name}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400 italic">No meal</span>
+                              )}
+                              {meal.is_leftover && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700 flex-shrink-0">
+                                  Leftovers
+                                </span>
+                              )}
                             </div>
                           ))}
                         </div>
                       ) : (
                         <span className="text-sm text-gray-400 italic">No dinner planned</span>
                       )}
+                    </div>
+
+                    {/* Assignee Column */}
+                    <div className="flex-shrink-0">
+                      {meals.length > 0 ? (
+                        <div className="space-y-1">
+                          {meals.map((meal) => (
+                            <AssigneeDropdown
+                              key={meal.id}
+                              currentAssignee={meal.assigned_user}
+                              members={householdMembers}
+                              onSelect={(userId) => handleMealAssigneeChange(meal.id, userId)}
+                              isUpdating={updatingMeals.has(meal.id)}
+                            />
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 );
@@ -954,63 +947,37 @@ export default function WeeklyPlanDetailPage() {
           )}
         </div>
       ) : (
-        /* Events Tab */
+        /* Events Tab - 3-column Table Layout matching Dinner Plans */
         <div className="space-y-4">
-          {DAY_NAMES.map((dayName, index) => {
-            const dayEvents = getEventsForDay(index);
-            if (dayEvents.length === 0) return null;
-            const today = isToday(index);
+          <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div className="divide-y divide-gray-100">
+              {DAY_NAMES.map((dayName, index) => {
+                const dayEvents = getEventsForDay(index);
+                if (dayEvents.length === 0) return null;
+                const today = isToday(index);
 
-            return (
-              <div
-                key={index}
-                className={`bg-white rounded-xl shadow-sm ${
-                  today ? "ring-2 ring-amber-500 shadow-md" : ""
-                }`}
-              >
-                {/* Day Header */}
-                <div className={`px-4 py-3 border-b rounded-t-xl flex items-center gap-3 ${
-                  today ? "bg-amber-50" : "bg-gray-50"
-                }`}>
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-lg ${
-                    today ? "bg-amber-500 text-white" : "bg-amber-100 text-amber-700"
-                  }`}>
-                    {getDayNumber(index)}
-                  </div>
-                  <div>
-                    <h3 className={`font-semibold ${today ? "text-amber-700" : "text-gray-900"}`}>
-                      {dayName}
-                      {today && <span className="ml-2 text-xs font-medium bg-amber-200 text-amber-800 px-2 py-0.5 rounded-full">Today</span>}
-                    </h3>
-                    <p className="text-xs text-gray-500">{getDateForDay(index)}</p>
-                  </div>
-                </div>
+                return (
+                  <div
+                    key={index}
+                    className={`flex items-start gap-4 p-4 ${today ? "bg-amber-50" : "hover:bg-gray-50"} transition-colors`}
+                  >
+                    {/* Date Column - iCal Style */}
+                    <div className="flex-shrink-0">
+                      <DateIcon dayIndex={index} weekOf={weeklyPlan.week_of} isHighlighted={today} />
+                    </div>
 
-                {/* Events */}
-                <div className="p-4 space-y-3">
-                  {dayEvents.map((event, eventIndex) => (
-                    <div
-                      key={event.id}
-                      className="relative p-4 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl"
-                      style={{ zIndex: dayEvents.length - eventIndex }}
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex items-start gap-3 min-w-0 flex-1">
-                          {/* Event Icon */}
-                          <div className="w-10 h-10 rounded-lg bg-amber-200 text-amber-700 flex items-center justify-center flex-shrink-0">
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                          </div>
-
-                          {/* Event Info */}
-                          <div className="min-w-0 flex-1">
-                            <h4 className="font-semibold text-gray-900">{event.title}</h4>
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-sm text-gray-600">
-                              <span className="inline-flex items-center gap-1">
-                                <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
+                    {/* Day Name & Events Column */}
+                    <div className="flex-1 min-w-0">
+                      <div className={`text-sm font-semibold mb-1 ${today ? "text-amber-700" : "text-gray-700"}`}>
+                        {dayName}
+                        {today && <span className="ml-2 text-xs font-medium bg-amber-200 text-amber-800 px-2 py-0.5 rounded-full">Today</span>}
+                      </div>
+                      <div className="space-y-2">
+                        {dayEvents.map((event) => (
+                          <div key={event.id}>
+                            <div className="font-medium text-gray-900">{event.title}</div>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-gray-500">
+                              <span>
                                 {event.all_day
                                   ? "All day"
                                   : new Date(event.start_time).toLocaleTimeString("en-US", {
@@ -1019,35 +986,33 @@ export default function WeeklyPlanDetailPage() {
                                     })}
                               </span>
                               {event.location && (
-                                <span className="inline-flex items-center gap-1">
-                                  <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                                  </svg>
-                                  <span className="truncate">{event.location}</span>
-                                </span>
+                                <span className="truncate">{event.location}</span>
                               )}
                             </div>
-                            {event.description && (
-                              <p className="mt-2 text-sm text-gray-500 line-clamp-2">{event.description}</p>
-                            )}
                           </div>
-                        </div>
-
-                        {/* Assignees */}
-                        <MultiAssigneeDropdown
-                          assignedUsers={event.assigned_users}
-                          members={householdMembers}
-                          onSelect={(userIds) => handleEventAssigneesChange(event.id, userIds)}
-                          isUpdating={updatingEvents.has(event.id)}
-                        />
+                        ))}
                       </div>
                     </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
+
+                    {/* Assignees Column */}
+                    <div className="flex-shrink-0">
+                      <div className="space-y-2">
+                        {dayEvents.map((event) => (
+                          <MultiAssigneeDropdown
+                            key={event.id}
+                            assignedUsers={event.assigned_users}
+                            members={householdMembers}
+                            onSelect={(userIds) => handleEventAssigneesChange(event.id, userIds)}
+                            isUpdating={updatingEvents.has(event.id)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
 
           {/* Empty state if no events on any day */}
           {weeklyPlan.events?.length === 0 && (

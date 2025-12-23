@@ -24,7 +24,7 @@ interface Recipe {
   recipe_ingredients?: { count: number }[];
 }
 
-type SortField = "name" | "category" | "cuisine" | "status" | "average_rating" | "last_made";
+type SortField = "name" | "cuisine" | "average_rating";
 type SortOrder = "asc" | "desc";
 
 export default function RecipesPage() {
@@ -32,7 +32,6 @@ export default function RecipesPage() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("");
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
 
@@ -70,11 +69,6 @@ export default function RecipesPage() {
       );
     }
 
-    // Apply status filter
-    if (statusFilter) {
-      result = result.filter((r) => r.status === statusFilter);
-    }
-
     // Apply sorting
     result.sort((a, b) => {
       let aVal = a[sortField];
@@ -99,7 +93,7 @@ export default function RecipesPage() {
     });
 
     return result;
-  }, [recipes, search, statusFilter, sortField, sortOrder]);
+  }, [recipes, search, sortField, sortOrder]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -119,11 +113,6 @@ export default function RecipesPage() {
     ) : (
       <span className="text-emerald-600 ml-1">&#8595;</span>
     );
-  };
-
-  const renderRating = (rating?: number) => {
-    if (!rating) return <span className="text-gray-400">-</span>;
-    return <span>{rating.toFixed(1)}</span>;
   };
 
   const renderStars = (rating?: number) => {
@@ -174,7 +163,7 @@ export default function RecipesPage() {
 
       {/* Filters */}
       <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Search
@@ -188,26 +177,10 @@ export default function RecipesPage() {
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Status
-            </label>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-            >
-              <option value="">All</option>
-              <option value="made">Made</option>
-              <option value="wishlist">Wishlist</option>
-            </select>
-          </div>
-
           <div className="flex items-end">
             <button
               onClick={() => {
                 setSearch("");
-                setStatusFilter("");
               }}
               className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
             >
@@ -231,21 +204,9 @@ export default function RecipesPage() {
                 </th>
                 <th
                   className="px-4 py-3 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort("category")}
-                >
-                  Category <SortIcon field="category" />
-                </th>
-                <th
-                  className="px-4 py-3 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
                   onClick={() => handleSort("cuisine")}
                 >
                   Cuisine <SortIcon field="cuisine" />
-                </th>
-                <th
-                  className="px-4 py-3 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort("status")}
-                >
-                  Status <SortIcon field="status" />
                 </th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
                   Ingredients
@@ -256,18 +217,12 @@ export default function RecipesPage() {
                 >
                   Rating <SortIcon field="average_rating" />
                 </th>
-                <th
-                  className="px-4 py-3 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort("last_made")}
-                >
-                  Last Made <SortIcon field="last_made" />
-                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {filteredAndSortedRecipes.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
+                  <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
                     No recipes found
                   </td>
                 </tr>
@@ -290,24 +245,8 @@ export default function RecipesPage() {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600 capitalize">
-                      {recipe.category || "-"}
-                    </td>
                     <td className="px-4 py-3 text-sm text-gray-600">
                       {recipe.cuisine || "-"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex px-2 py-1 text-xs rounded-full ${
-                          recipe.status === "made"
-                            ? "bg-emerald-100 text-emerald-800"
-                            : recipe.status === "wishlist"
-                            ? "bg-amber-100 text-amber-800"
-                            : "bg-gray-100 text-gray-800"
-                        }`}
-                      >
-                        {recipe.status}
-                      </span>
                     </td>
                     <td className="px-4 py-3 text-sm">
                       {(() => {
@@ -328,11 +267,6 @@ export default function RecipesPage() {
                     </td>
                     <td className="px-4 py-3 text-sm">
                       {renderStars(recipe.average_rating)}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
-                      {recipe.last_made
-                        ? new Date(recipe.last_made).toLocaleDateString()
-                        : "-"}
                     </td>
                   </tr>
                 ))

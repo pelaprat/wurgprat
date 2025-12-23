@@ -5,8 +5,39 @@ import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { useEvents, Event } from "@/contexts/EventsContext";
 
-type SortField = "title" | "start_time" | "location";
+type SortField = "title" | "start_time";
 type SortOrder = "asc" | "desc";
+
+// iCal-style date icon component
+function DateIcon({ dateStr, isHighlighted = false }: { dateStr: string; isHighlighted?: boolean }) {
+  const date = new Date(dateStr);
+  const month = date.toLocaleDateString(undefined, { month: "short" }).toUpperCase();
+  const day = date.getDate();
+
+  return (
+    <div className={`w-14 h-14 flex flex-col items-center justify-center rounded-lg overflow-hidden shadow-sm border ${
+      isHighlighted ? "border-emerald-400" : "border-gray-200"
+    }`}>
+      <div className={`w-full text-center text-[10px] font-bold py-0.5 ${
+        isHighlighted ? "bg-emerald-500 text-white" : "bg-red-500 text-white"
+      }`}>
+        {month}
+      </div>
+      <div className={`flex-1 w-full flex items-center justify-center text-xl font-bold ${
+        isHighlighted ? "bg-emerald-50 text-emerald-700" : "bg-white text-gray-900"
+      }`}>
+        {day}
+      </div>
+    </div>
+  );
+}
+
+function formatWeekOf(dateStr: string) {
+  const date = new Date(dateStr + "T00:00:00");
+  const endDate = new Date(date);
+  endDate.setDate(date.getDate() + 6);
+  return `${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })} - ${endDate.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+}
 
 export default function EventsPage() {
   const { data: session } = useSession();
@@ -46,9 +77,6 @@ export default function EventsPage() {
       } else if (sortField === "start_time") {
         aVal = new Date(a.start_time);
         bVal = new Date(b.start_time);
-      } else if (sortField === "location") {
-        aVal = a.location || "";
-        bVal = b.location || "";
       }
 
       if (aVal instanceof Date && bVal instanceof Date) {
@@ -64,44 +92,6 @@ export default function EventsPage() {
 
     return result;
   }, [events, search, showPast, sortField, sortOrder]);
-
-  const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
-    } else {
-      setSortField(field);
-      setSortOrder("asc");
-    }
-  };
-
-  const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortField !== field) {
-      return <span className="text-gray-300 ml-1">&#8597;</span>;
-    }
-    return sortOrder === "asc" ? (
-      <span className="text-emerald-600 ml-1">&#8593;</span>
-    ) : (
-      <span className="text-emerald-600 ml-1">&#8595;</span>
-    );
-  };
-
-  const formatEventTime = (event: Event) => {
-    const start = new Date(event.start_time);
-    if (event.all_day) {
-      return start.toLocaleDateString(undefined, {
-        weekday: "short",
-        month: "short",
-        day: "numeric",
-      });
-    }
-    return start.toLocaleString(undefined, {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  };
 
   const isToday = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -189,94 +179,82 @@ export default function EventsPage() {
         </div>
       </div>
 
-      {/* Table */}
+      {/* Events List - 3 Column Layout */}
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th
-                  className="px-4 py-3 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort("start_time")}
+        {filteredAndSortedEvents.length === 0 ? (
+          <div className="px-4 py-8 text-center text-gray-500">
+            No events found
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {filteredAndSortedEvents.map((event) => {
+              const today = isToday(event.start_time);
+              const past = isPast(event.start_time);
+              const weeklyPlans = event.weekly_plan_assignments?.map(a => a.weekly_plan).filter(Boolean) || [];
+
+              return (
+                <div
+                  key={event.id}
+                  className={`flex items-center gap-4 p-4 ${today ? "bg-emerald-50" : "hover:bg-gray-50"} ${past ? "opacity-60" : ""} transition-colors`}
                 >
-                  Date/Time <SortIcon field="start_time" />
-                </th>
-                <th
-                  className="px-4 py-3 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort("title")}
-                >
-                  Event <SortIcon field="title" />
-                </th>
-                <th
-                  className="px-4 py-3 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort("location")}
-                >
-                  Location <SortIcon field="location" />
-                </th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
-                  Type
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {filteredAndSortedEvents.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
-                    No events found
-                  </td>
-                </tr>
-              ) : (
-                filteredAndSortedEvents.map((event) => (
-                  <tr
-                    key={event.id}
-                    className={`hover:bg-gray-50 transition-colors ${
-                      isPast(event.start_time) ? "opacity-60" : ""
-                    }`}
-                  >
-                    <td className="px-4 py-3 text-sm">
-                      <span
-                        className={
-                          isToday(event.start_time)
-                            ? "font-semibold text-emerald-600"
-                            : "text-gray-600"
-                        }
-                      >
-                        {formatEventTime(event)}
-                      </span>
-                      {isToday(event.start_time) && (
-                        <span className="ml-2 px-2 py-0.5 text-xs bg-emerald-100 text-emerald-800 rounded">
-                          Today
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
+                  {/* Date Column - iCal Style */}
+                  <div className="flex-shrink-0">
+                    <DateIcon dateStr={event.start_time} isHighlighted={today} />
+                  </div>
+
+                  {/* Event Column */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
                       <Link
                         href={`/events/${event.id}`}
-                        className="text-emerald-600 hover:text-emerald-700 font-medium"
+                        className="font-medium text-gray-900 hover:text-emerald-600 transition-colors truncate"
                       >
                         {event.title}
                       </Link>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
-                      {event.location || "-"}
-                    </td>
-                    <td className="px-4 py-3">
-                      {event.all_day ? (
-                        <span className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded">
-                          All day
-                        </span>
-                      ) : (
-                        <span className="px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded">
-                          Timed
+                      {today && (
+                        <span className="px-2 py-0.5 text-xs bg-emerald-200 text-emerald-800 rounded-full">
+                          Today
                         </span>
                       )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-gray-500 mt-0.5">
+                      <span>
+                        {event.all_day
+                          ? "All day"
+                          : new Date(event.start_time).toLocaleTimeString("en-US", {
+                              hour: "numeric",
+                              minute: "2-digit",
+                            })}
+                      </span>
+                      {event.location && (
+                        <span className="truncate">{event.location}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Weekly Plans Column */}
+                  <div className="flex-shrink-0 text-right">
+                    {weeklyPlans.length > 0 ? (
+                      <div className="space-y-1">
+                        {weeklyPlans.map((plan) => (
+                          <Link
+                            key={plan.id}
+                            href={`/weekly-plans/${plan.id}?tab=events`}
+                            className="block text-sm text-emerald-600 hover:text-emerald-700"
+                          >
+                            {formatWeekOf(plan.week_of)}
+                          </Link>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-sm text-gray-400">-</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

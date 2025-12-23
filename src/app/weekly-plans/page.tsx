@@ -14,11 +14,17 @@ interface Meal {
   };
 }
 
+interface EventAssignment {
+  id: string;
+  event_id: string;
+}
+
 interface WeeklyPlan {
   id: string;
   week_of: string;
   notes?: string;
   meals: Meal[];
+  event_assignments: EventAssignment[];
   created_at: string;
 }
 
@@ -75,6 +81,12 @@ export default function WeeklyPlansPage() {
     return plan.meals?.filter((m) => m.recipe).length || 0;
   };
 
+  const getEventCount = (plan: WeeklyPlan) => {
+    // Get unique event IDs since multiple users can be assigned to the same event
+    const uniqueEventIds = new Set(plan.event_assignments?.map((ea) => ea.event_id) || []);
+    return uniqueEventIds.size;
+  };
+
   if (!session) {
     return (
       <div className="text-center py-12">
@@ -125,10 +137,7 @@ export default function WeeklyPlansPage() {
                   Meals Planned
                 </th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
-                  Notes
-                </th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
-                  Created
+                  Events
                 </th>
               </tr>
             </thead>
@@ -152,16 +161,7 @@ export default function WeeklyPlansPage() {
                     {getMealCount(plan)} / 7 dinners
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600">
-                    {plan.notes ? (
-                      <span className="truncate max-w-[200px] block">
-                        {plan.notes}
-                      </span>
-                    ) : (
-                      "-"
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-500">
-                    {new Date(plan.created_at).toLocaleDateString()}
+                    {getEventCount(plan)} event{getEventCount(plan) !== 1 ? "s" : ""}
                   </td>
                 </tr>
               ))}

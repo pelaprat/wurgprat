@@ -18,7 +18,6 @@ export default function DepartmentsPage() {
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (session) {
@@ -33,38 +32,34 @@ export default function DepartmentsPage() {
         const data = await response.json();
         setDepartments(data.departments || []);
       }
-    } catch (err) {
-      console.error("Failed to fetch departments:", err);
+    } catch (error) {
+      console.error("Failed to fetch departments:", error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleAddDepartment = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAddDepartment = async () => {
     if (!newDeptName.trim()) return;
 
     setIsAdding(true);
-    setError(null);
-
     try {
       const response = await fetch("/api/departments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newDeptName.trim() }),
+        body: JSON.stringify({
+          name: newDeptName.trim(),
+          sort_order: departments.length,
+        }),
       });
 
       if (response.ok) {
         const data = await response.json();
-        setDepartments((prev) => [...prev, data.department]);
+        setDepartments([...departments, data.department]);
         setNewDeptName("");
-      } else {
-        const data = await response.json();
-        setError(data.error || "Failed to add department");
       }
-    } catch (err) {
-      console.error("Failed to add department:", err);
-      setError("Failed to add department");
+    } catch (error) {
+      console.error("Failed to add department:", error);
     } finally {
       setIsAdding(false);
     }
@@ -73,7 +68,6 @@ export default function DepartmentsPage() {
   const handleStartEdit = (dept: Department) => {
     setEditingId(dept.id);
     setEditingName(dept.name);
-    setError(null);
   };
 
   const handleCancelEdit = () => {
@@ -82,9 +76,10 @@ export default function DepartmentsPage() {
   };
 
   const handleSaveEdit = async (id: string) => {
-    if (!editingName.trim()) return;
-
-    setError(null);
+    if (!editingName.trim()) {
+      handleCancelEdit();
+      return;
+    }
 
     try {
       const response = await fetch(`/api/departments/${id}`, {
@@ -98,22 +93,18 @@ export default function DepartmentsPage() {
         setDepartments((prev) =>
           prev.map((d) => (d.id === id ? data.department : d))
         );
-        setEditingId(null);
-        setEditingName("");
-      } else {
-        const data = await response.json();
-        setError(data.error || "Failed to update department");
       }
-    } catch (err) {
-      console.error("Failed to update department:", err);
-      setError("Failed to update department");
+    } catch (error) {
+      console.error("Failed to update department:", error);
+    } finally {
+      handleCancelEdit();
     }
   };
 
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to delete "${name}"?`)) return;
-
-    setError(null);
+    if (!confirm(`Delete "${name}"? Any ingredients assigned to this department will have their department cleared.`)) {
+      return;
+    }
 
     try {
       const response = await fetch(`/api/departments/${id}`, {
@@ -123,60 +114,19 @@ export default function DepartmentsPage() {
       if (response.ok) {
         setDepartments((prev) => prev.filter((d) => d.id !== id));
       } else {
-        const data = await response.json();
-        setError(data.error || "Failed to delete department");
+        const error = await response.json();
+        alert(error.error || "Failed to delete department");
       }
-    } catch (err) {
-      console.error("Failed to delete department:", err);
-      setError("Failed to delete department");
-    }
-  };
-
-  const handleMoveUp = async (index: number) => {
-    if (index === 0) return;
-    await swapSortOrder(index, index - 1);
-  };
-
-  const handleMoveDown = async (index: number) => {
-    if (index === departments.length - 1) return;
-    await swapSortOrder(index, index + 1);
-  };
-
-  const swapSortOrder = async (indexA: number, indexB: number) => {
-    const deptA = departments[indexA];
-    const deptB = departments[indexB];
-
-    // Optimistically update UI
-    const newDepts = [...departments];
-    newDepts[indexA] = { ...deptB, sort_order: deptA.sort_order };
-    newDepts[indexB] = { ...deptA, sort_order: deptB.sort_order };
-    setDepartments(newDepts);
-
-    // Update in database
-    try {
-      await Promise.all([
-        fetch(`/api/departments/${deptA.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sort_order: deptB.sort_order }),
-        }),
-        fetch(`/api/departments/${deptB.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sort_order: deptA.sort_order }),
-        }),
-      ]);
-    } catch (err) {
-      console.error("Failed to reorder departments:", err);
-      // Revert on error
-      fetchDepartments();
+    } catch (error) {
+      console.error("Failed to delete department:", error);
+      alert("Failed to delete department");
     }
   };
 
   if (!session) {
     return (
       <div className="text-center py-12">
-        <p className="text-gray-600">Please sign in to manage departments.</p>
+        <p className="text-gray-600">Please sign in to view departments.</p>
       </div>
     );
   }
@@ -190,194 +140,102 @@ export default function DepartmentsPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="mb-6">
+    <div className="max-w-4xl mx-auto">
+      <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Departments</h1>
-        <p className="text-gray-600 mt-1">
-          Manage grocery store departments for organizing ingredients.
-        </p>
+        <span className="text-sm text-gray-500">{departments.length} departments</span>
       </div>
 
-      {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700">
-          {error}
-        </div>
-      )}
-
-      {/* Add new department form */}
-      <form onSubmit={handleAddDepartment} className="mb-6">
-        <div className="flex gap-2">
+      {/* Add Department */}
+      <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
+        <div className="flex space-x-3">
           <input
             type="text"
             value={newDeptName}
             onChange={(e) => setNewDeptName(e.target.value)}
-            placeholder="New department name..."
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            placeholder="Add a new department..."
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            onKeyDown={(e) => e.key === "Enter" && handleAddDepartment()}
           />
           <button
-            type="submit"
+            onClick={handleAddDepartment}
             disabled={isAdding || !newDeptName.trim()}
-            className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+            className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50"
           >
-            {isAdding ? "Adding..." : "Add"}
+            {isAdding ? "Adding..." : "Add Department"}
           </button>
         </div>
-      </form>
+      </div>
 
-      {/* Departments list */}
+      {/* Department List */}
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         {departments.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
-            <svg
-              className="w-12 h-12 mx-auto text-gray-300 mb-3"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-              />
-            </svg>
-            <p>No departments yet.</p>
-            <p className="text-sm mt-1">Add your first department above.</p>
+            No departments yet. Add your first department above.
           </div>
         ) : (
-          <ul className="divide-y divide-gray-200">
-            {departments.map((dept, index) => (
-              <li
-                key={dept.id}
-                className="flex items-center justify-between p-4 hover:bg-gray-50"
-              >
-                {editingId === dept.id ? (
-                  <div className="flex-1 flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={editingName}
-                      onChange={(e) => setEditingName(e.target.value)}
-                      className="flex-1 px-3 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                      autoFocus
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") handleSaveEdit(dept.id);
-                        if (e.key === "Escape") handleCancelEdit();
-                      }}
-                    />
-                    <button
-                      onClick={() => handleSaveEdit(dept.id)}
-                      className="px-3 py-1 text-sm bg-emerald-600 text-white rounded hover:bg-emerald-700"
-                    >
-                      Save
-                    </button>
-                    <button
-                      onClick={handleCancelEdit}
-                      className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex items-center gap-3">
-                      {/* Reorder buttons */}
-                      <div className="flex flex-col">
-                        <button
-                          onClick={() => handleMoveUp(index)}
-                          disabled={index === 0}
-                          className="text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed p-0.5"
-                          title="Move up"
-                        >
-                          <svg
-                            className="w-4 h-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M5 15l7-7 7 7"
-                            />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={() => handleMoveDown(index)}
-                          disabled={index === departments.length - 1}
-                          className="text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed p-0.5"
-                          title="Move down"
-                        >
-                          <svg
-                            className="w-4 h-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M19 9l-7 7-7-7"
-                            />
-                          </svg>
-                        </button>
-                      </div>
-                      <span className="font-medium text-gray-900">
-                        {dept.name}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
+          <table className="w-full">
+            <thead className="bg-gray-50 border-b">
+              <tr>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 w-16">
+                  Order
+                </th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
+                  Name
+                </th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 w-32">
+                  Created
+                </th>
+                <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700 w-24">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {departments.map((dept, index) => (
+                <tr key={dept.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-4 py-3 text-sm text-gray-500">{index + 1}</td>
+                  <td className="px-4 py-3">
+                    {editingId === dept.id ? (
+                      <input
+                        type="text"
+                        value={editingName}
+                        onChange={(e) => setEditingName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleSaveEdit(dept.id);
+                          if (e.key === "Escape") handleCancelEdit();
+                        }}
+                        onBlur={() => handleSaveEdit(dept.id)}
+                        autoFocus
+                        className="w-full px-2 py-1 border border-emerald-500 rounded focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                      />
+                    ) : (
                       <button
                         onClick={() => handleStartEdit(dept)}
-                        className="p-2 text-gray-400 hover:text-emerald-600 transition-colors"
-                        title="Edit"
+                        className="text-emerald-600 hover:text-emerald-700 font-medium text-left hover:underline"
                       >
-                        <svg
-                          className="w-4 h-4"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                          />
-                        </svg>
+                        {dept.name}
                       </button>
-                      <button
-                        onClick={() => handleDelete(dept.id, dept.name)}
-                        className="p-2 text-gray-400 hover:text-red-600 transition-colors"
-                        title="Delete"
-                      >
-                        <svg
-                          className="w-4 h-4"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                          />
-                        </svg>
-                      </button>
-                    </div>
-                  </>
-                )}
-              </li>
-            ))}
-          </ul>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-500">
+                    {new Date(dept.created_at).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      onClick={() => handleDelete(dept.id, dept.name)}
+                      className="text-red-500 hover:text-red-700 text-sm"
+                      title="Delete department"
+                    >
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
-
-      <p className="mt-4 text-sm text-gray-500">
-        Departments help organize ingredients by store section, making grocery shopping more efficient.
-      </p>
     </div>
   );
 }

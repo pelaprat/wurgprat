@@ -10,6 +10,11 @@ import {
 } from "react";
 import { useSession } from "next-auth/react";
 
+export interface WeeklyPlanReference {
+  id: string;
+  week_of: string;
+}
+
 export interface Event {
   id: string;
   title: string;
@@ -20,6 +25,9 @@ export interface Event {
   location?: string;
   html_link?: string;
   created_at?: string;
+  weekly_plan_assignments?: {
+    weekly_plan: WeeklyPlanReference;
+  }[];
 }
 
 interface EventsContextType {
