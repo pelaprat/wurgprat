@@ -147,8 +147,10 @@ function AssigneeDropdown({
       <button
         onClick={() => !isUpdating && setIsOpen(!isOpen)}
         disabled={isUpdating}
-        className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-sm transition-all ${
-          isUpdating ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-100 cursor-pointer"
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+        className={`flex items-center gap-1.5 px-3 py-2 sm:px-2 sm:py-1 rounded-lg text-sm transition-all ${
+          isUpdating ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-100 active:bg-gray-200 cursor-pointer"
         } ${currentAssignee ? "bg-emerald-50 text-emerald-700" : "bg-gray-100 text-gray-500"}`}
       >
         {currentAssignee ? (
@@ -167,11 +169,11 @@ function AssigneeDropdown({
       </button>
 
       {isOpen && (
-        <div className="absolute z-50 mt-1 right-0 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[160px]">
+        <div className="absolute z-50 mt-1 left-0 sm:left-auto sm:right-0 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[180px] max-w-[calc(100vw-2rem)]" role="listbox">
           {currentAssignee && (
             <button
               onClick={() => { onSelect(null); setIsOpen(false); }}
-              className="w-full px-3 py-2 text-left text-sm text-gray-500 hover:bg-gray-50 flex items-center gap-2"
+              className="w-full px-4 py-3 sm:px-3 sm:py-2 text-left text-sm text-gray-500 hover:bg-gray-50 active:bg-gray-100 flex items-center gap-2"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -183,7 +185,9 @@ function AssigneeDropdown({
             <button
               key={member.id}
               onClick={() => { onSelect(member.id); setIsOpen(false); }}
-              className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 ${
+              role="option"
+              aria-selected={currentAssignee?.id === member.id}
+              className={`w-full px-4 py-3 sm:px-3 sm:py-2 text-left text-sm hover:bg-gray-50 active:bg-gray-100 flex items-center gap-2 ${
                 currentAssignee?.id === member.id ? "bg-emerald-50 text-emerald-700" : "text-gray-700"
               }`}
             >
@@ -239,8 +243,10 @@ function MultiAssigneeDropdown({
       <button
         onClick={() => !isUpdating && setIsOpen(!isOpen)}
         disabled={isUpdating}
-        className={`flex items-center gap-1 px-2 py-1 rounded-lg text-sm transition-all ${
-          isUpdating ? "opacity-50 cursor-not-allowed" : "hover:bg-emerald-100 cursor-pointer"
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+        className={`flex items-center gap-1 px-3 py-2 sm:px-2 sm:py-1 rounded-lg text-sm transition-all ${
+          isUpdating ? "opacity-50 cursor-not-allowed" : "hover:bg-emerald-100 active:bg-emerald-200 cursor-pointer"
         } ${assignedUsers.length > 0 ? "bg-emerald-50" : "bg-gray-100"}`}
       >
         {assignedUsers.length > 0 ? (
@@ -261,19 +267,21 @@ function MultiAssigneeDropdown({
       </button>
 
       {isOpen && (
-        <div className="absolute z-50 mt-1 right-0 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[180px]">
-          <div className="px-3 py-1.5 text-xs font-medium text-gray-500 border-b">Select attendees</div>
+        <div className="absolute z-50 mt-1 left-0 sm:left-auto sm:right-0 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[200px] max-w-[calc(100vw-2rem)]" role="listbox">
+          <div className="px-4 py-2 sm:px-3 sm:py-1.5 text-xs font-medium text-gray-500 border-b">Select attendees</div>
           {members.map((member) => {
             const isAssigned = assignedIds.has(member.id);
             return (
               <button
                 key={member.id}
                 onClick={() => toggleUser(member.id)}
-                className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 ${
+                role="option"
+                aria-selected={isAssigned}
+                className={`w-full px-4 py-3 sm:px-3 sm:py-2 text-left text-sm hover:bg-gray-50 active:bg-gray-100 flex items-center gap-3 sm:gap-2 ${
                   isAssigned ? "bg-emerald-50" : ""
                 }`}
               >
-                <span className={`w-4 h-4 rounded border flex items-center justify-center ${
+                <span className={`w-5 h-5 sm:w-4 sm:h-4 rounded border flex items-center justify-center flex-shrink-0 ${
                   isAssigned ? "bg-emerald-600 border-emerald-600" : "border-gray-300"
                 }`}>
                   {isAssigned && (
@@ -667,31 +675,31 @@ export default function WeeklyPlanDetailPage() {
     <div className="max-w-4xl mx-auto">
       {/* Header */}
       <div className="mb-6">
-        <Link href="/weekly-plans" className="text-sm text-gray-500 hover:text-gray-700 mb-2 inline-flex items-center gap-1">
+        <Link href="/weekly-plans" className="text-sm text-gray-500 hover:text-gray-700 mb-2 inline-flex items-center gap-1 py-1">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
           Weekly Plans
         </Link>
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
             {formatWeekOf(weeklyPlan.week_of)}
           </h1>
           <button
             onClick={handleDelete}
-            className="px-3 py-1.5 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+            className="self-start px-3 py-2 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
           >
             Delete Plan
           </button>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="border-b border-gray-200 mb-6">
-        <nav className="-mb-px flex space-x-8">
+      {/* Tabs - scrollable on mobile */}
+      <div className="border-b border-gray-200 mb-6 -mx-4 px-4 sm:mx-0 sm:px-0">
+        <nav className="-mb-px flex space-x-4 sm:space-x-8 overflow-x-auto scrollbar-hide pb-px">
           <button
             onClick={() => setActiveTab("grocery")}
-            className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors flex items-center gap-2 ${
+            className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors flex items-center gap-1.5 sm:gap-2 whitespace-nowrap flex-shrink-0 ${
               activeTab === "grocery"
                 ? "border-emerald-500 text-emerald-600"
                 : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
@@ -700,9 +708,10 @@ export default function WeeklyPlanDetailPage() {
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
             </svg>
-            Grocery List
+            <span className="hidden sm:inline">Grocery List</span>
+            <span className="sm:hidden">Groceries</span>
             {totalCount > 0 && (
-              <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${
+              <span className={`px-1.5 sm:px-2 py-0.5 text-xs rounded-full font-medium ${
                 checkedCount === totalCount
                   ? "bg-emerald-100 text-emerald-700"
                   : "bg-gray-100 text-gray-600"
@@ -713,7 +722,7 @@ export default function WeeklyPlanDetailPage() {
           </button>
           <button
             onClick={() => setActiveTab("dinner")}
-            className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors flex items-center gap-2 ${
+            className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors flex items-center gap-1.5 sm:gap-2 whitespace-nowrap flex-shrink-0 ${
               activeTab === "dinner"
                 ? "border-emerald-500 text-emerald-600"
                 : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
@@ -722,15 +731,16 @@ export default function WeeklyPlanDetailPage() {
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
             </svg>
-            Dinner Plans
-            <span className="px-2 py-0.5 text-xs rounded-full font-medium bg-gray-100 text-gray-600">
+            <span className="hidden sm:inline">Dinner Plans</span>
+            <span className="sm:hidden">Dinners</span>
+            <span className="px-1.5 sm:px-2 py-0.5 text-xs rounded-full font-medium bg-gray-100 text-gray-600">
               {dinnerCount}
             </span>
           </button>
           {eventsCount > 0 && (
             <button
               onClick={() => setActiveTab("events")}
-              className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors flex items-center gap-2 ${
+              className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors flex items-center gap-1.5 sm:gap-2 whitespace-nowrap flex-shrink-0 ${
                 activeTab === "events"
                   ? "border-emerald-500 text-emerald-600"
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
@@ -740,7 +750,7 @@ export default function WeeklyPlanDetailPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
               Events
-              <span className="px-2 py-0.5 text-xs rounded-full font-medium bg-amber-100 text-amber-700">
+              <span className="px-1.5 sm:px-2 py-0.5 text-xs rounded-full font-medium bg-amber-100 text-amber-700">
                 {eventsCount}
               </span>
             </button>

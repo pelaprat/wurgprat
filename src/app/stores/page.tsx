@@ -141,6 +141,7 @@ export default function StoresPage() {
 
   return (
     <div className="max-w-4xl mx-auto">
+      {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Stores</h1>
         <span className="text-sm text-gray-500">{stores.length} stores</span>
@@ -148,19 +149,19 @@ export default function StoresPage() {
 
       {/* Add Store */}
       <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
-        <div className="flex space-x-3">
+        <div className="flex flex-col sm:flex-row gap-3">
           <input
             type="text"
             value={newStoreName}
             onChange={(e) => setNewStoreName(e.target.value)}
             placeholder="Add a new store..."
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            className="flex-1 px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-base"
             onKeyDown={(e) => e.key === "Enter" && handleAddStore()}
           />
           <button
             onClick={handleAddStore}
             disabled={isAdding || !newStoreName.trim()}
-            className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50"
+            className="px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 font-medium whitespace-nowrap"
           >
             {isAdding ? "Adding..." : "Add Store"}
           </button>
@@ -168,74 +169,122 @@ export default function StoresPage() {
       </div>
 
       {/* Store List */}
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        {stores.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
-            No stores yet. Add your first store above.
+      {stores.length === 0 ? (
+        <div className="bg-white rounded-xl shadow-sm p-6 sm:p-8 text-center text-gray-500">
+          No stores yet. Add your first store above.
+        </div>
+      ) : (
+        <>
+          {/* Mobile card view */}
+          <div className="md:hidden space-y-3">
+            {stores.map((store, index) => (
+              <div key={store.id} className="bg-white rounded-xl shadow-sm p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-400 w-6">{index + 1}.</span>
+                      {editingId === store.id ? (
+                        <input
+                          type="text"
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleSaveEdit(store.id);
+                            if (e.key === "Escape") handleCancelEdit();
+                          }}
+                          onBlur={() => handleSaveEdit(store.id)}
+                          autoFocus
+                          className="flex-1 px-2 py-1 border border-emerald-500 rounded focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-base"
+                        />
+                      ) : (
+                        <button
+                          onClick={() => handleStartEdit(store)}
+                          className="text-emerald-600 font-medium text-left truncate"
+                        >
+                          {store.name}
+                        </button>
+                      )}
+                    </div>
+                    <div className="text-sm text-gray-500 mt-1 ml-8">
+                      Added {new Date(store.created_at).toLocaleDateString()}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleDelete(store.id, store.name)}
+                    className="px-3 py-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg text-sm transition-colors"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
-        ) : (
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 w-16">
-                  Order
-                </th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
-                  Name
-                </th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 w-32">
-                  Created
-                </th>
-                <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700 w-24">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {stores.map((store, index) => (
-                <tr key={store.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3 text-sm text-gray-500">{index + 1}</td>
-                  <td className="px-4 py-3">
-                    {editingId === store.id ? (
-                      <input
-                        type="text"
-                        value={editingName}
-                        onChange={(e) => setEditingName(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") handleSaveEdit(store.id);
-                          if (e.key === "Escape") handleCancelEdit();
-                        }}
-                        onBlur={() => handleSaveEdit(store.id)}
-                        autoFocus
-                        className="w-full px-2 py-1 border border-emerald-500 rounded focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                      />
-                    ) : (
-                      <button
-                        onClick={() => handleStartEdit(store)}
-                        className="text-emerald-600 hover:text-emerald-700 font-medium text-left hover:underline"
-                      >
-                        {store.name}
-                      </button>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-500">
-                    {new Date(store.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => handleDelete(store.id, store.name)}
-                      className="text-red-500 hover:text-red-700 text-sm"
-                      title="Delete store"
-                    >
-                      Delete
-                    </button>
-                  </td>
+
+          {/* Desktop table view */}
+          <div className="hidden md:block bg-white rounded-xl shadow-sm overflow-hidden">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 w-16">
+                    Order
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
+                    Name
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 w-32">
+                    Created
+                  </th>
+                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700 w-24">
+                    Actions
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {stores.map((store, index) => (
+                  <tr key={store.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3 text-sm text-gray-500">{index + 1}</td>
+                    <td className="px-4 py-3">
+                      {editingId === store.id ? (
+                        <input
+                          type="text"
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleSaveEdit(store.id);
+                            if (e.key === "Escape") handleCancelEdit();
+                          }}
+                          onBlur={() => handleSaveEdit(store.id)}
+                          autoFocus
+                          className="w-full px-2 py-1 border border-emerald-500 rounded focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                        />
+                      ) : (
+                        <button
+                          onClick={() => handleStartEdit(store)}
+                          className="text-emerald-600 hover:text-emerald-700 font-medium text-left hover:underline"
+                        >
+                          {store.name}
+                        </button>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-500">
+                      {new Date(store.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        onClick={() => handleDelete(store.id, store.name)}
+                        className="text-red-500 hover:text-red-700 text-sm"
+                        title="Delete store"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   );
 }

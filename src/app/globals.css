@@ -18,3 +18,25 @@ body {
     rgb(var(--background-start-rgb));
   min-height: 100vh;
 }
+
+/* Hide scrollbar for horizontal scrolling elements */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Improve touch targets on mobile */
+@media (max-width: 640px) {
+  input[type="checkbox"] {
+    min-width: 20px;
+    min-height: 20px;
+  }
+
+  select {
+    min-height: 44px;
+  }
+}

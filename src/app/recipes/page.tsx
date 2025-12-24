@@ -146,25 +146,26 @@ export default function RecipesPage() {
 
   return (
     <div className="max-w-7xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
+      {/* Header - stacks on mobile */}
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Recipes</h1>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center justify-between sm:justify-end gap-4">
           <Link
             href="/recipes/new"
-            className="px-4 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 transition-colors"
+            className="inline-flex justify-center px-4 py-2.5 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 transition-colors font-medium"
           >
             + New Recipe
           </Link>
           <span className="text-sm text-gray-500">
-            {filteredAndSortedRecipes.length} of {recipes.length} recipes
+            {filteredAndSortedRecipes.length} of {recipes.length}
           </span>
         </div>
       </div>
 
       {/* Filters */}
       <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex-1">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Search
             </label>
@@ -173,61 +174,105 @@ export default function RecipesPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search recipes..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-base"
             />
           </div>
 
-          <div className="flex items-end">
-            <button
-              onClick={() => {
-                setSearch("");
-              }}
-              className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
-            >
-              Clear filters
-            </button>
-          </div>
+          {search && (
+            <div className="flex items-end">
+              <button
+                onClick={() => setSearch("")}
+                className="px-4 py-2.5 text-gray-600 hover:text-gray-800 transition-colors"
+              >
+                Clear
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th
-                  className="px-4 py-3 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort("name")}
+      {filteredAndSortedRecipes.length === 0 ? (
+        <div className="bg-white rounded-xl shadow-sm p-6 sm:p-8 text-center">
+          <p className="text-gray-500">No recipes found</p>
+        </div>
+      ) : (
+        <>
+          {/* Mobile card view */}
+          <div className="md:hidden space-y-3">
+            {filteredAndSortedRecipes.map((recipe) => {
+              const ingredientCount = recipe.recipe_ingredients?.[0]?.count || 0;
+              return (
+                <Link
+                  key={recipe.id}
+                  href={`/recipes/${recipe.id}`}
+                  className="block bg-white rounded-xl shadow-sm p-4 hover:shadow-md transition-shadow active:bg-gray-50"
                 >
-                  Name <SortIcon field="name" />
-                </th>
-                <th
-                  className="px-4 py-3 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort("cuisine")}
-                >
-                  Cuisine <SortIcon field="cuisine" />
-                </th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
-                  Ingredients
-                </th>
-                <th
-                  className="px-4 py-3 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort("average_rating")}
-                >
-                  Rating <SortIcon field="average_rating" />
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {filteredAndSortedRecipes.length === 0 ? (
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-gray-900 truncate">
+                        {recipe.name}
+                      </div>
+                      {recipe.source && (
+                        <div className="text-sm text-gray-500 truncate mt-0.5">
+                          {recipe.source}
+                        </div>
+                      )}
+                      <div className="flex items-center flex-wrap gap-x-4 gap-y-1 mt-2 text-sm">
+                        {recipe.cuisine && (
+                          <span className="text-gray-600">{recipe.cuisine}</span>
+                        )}
+                        {ingredientCount > 0 ? (
+                          <span className="text-emerald-700">{ingredientCount} ingredients</span>
+                        ) : (
+                          <span className="text-red-600">Not fetched</span>
+                        )}
+                        {recipe.average_rating && (
+                          <span className="text-amber-500">
+                            {"★".repeat(Math.floor(recipe.average_rating))}
+                            {recipe.average_rating % 1 >= 0.5 && "½"}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <svg className="w-5 h-5 text-gray-400 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+
+          {/* Desktop table view */}
+          <div className="hidden md:block bg-white rounded-xl shadow-sm overflow-hidden">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b">
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
-                    No recipes found
-                  </td>
+                  <th
+                    className="px-4 py-3 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort("name")}
+                  >
+                    Name <SortIcon field="name" />
+                  </th>
+                  <th
+                    className="px-4 py-3 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort("cuisine")}
+                  >
+                    Cuisine <SortIcon field="cuisine" />
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
+                    Ingredients
+                  </th>
+                  <th
+                    className="px-4 py-3 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort("average_rating")}
+                  >
+                    Rating <SortIcon field="average_rating" />
+                  </th>
                 </tr>
-              ) : (
-                filteredAndSortedRecipes.map((recipe) => (
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {filteredAndSortedRecipes.map((recipe) => (
                   <tr
                     key={recipe.id}
                     className="hover:bg-gray-50 transition-colors"
@@ -269,12 +314,12 @@ export default function RecipesPage() {
                       {renderStars(recipe.average_rating)}
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   );
 }

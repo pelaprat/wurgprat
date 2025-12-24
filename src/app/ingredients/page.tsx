@@ -391,27 +391,28 @@ export default function IngredientsPage() {
 
   return (
     <div className="max-w-6xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
+      {/* Header - stacks on mobile */}
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Ingredients</h1>
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4">
           <button
             onClick={handleFindDuplicates}
-            className="px-4 py-2 text-sm bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors flex items-center"
+            className="px-4 py-2.5 text-sm bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors flex items-center font-medium"
           >
             <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
             </svg>
-            Find Duplicates
+            <span className="hidden sm:inline">Find </span>Duplicates
           </button>
           <span className="text-sm text-gray-500">
-            {filteredAndSortedIngredients.length} of {ingredients.length} ingredients
+            {filteredAndSortedIngredients.length} of {ingredients.length}
           </span>
         </div>
       </div>
 
       {/* Filters */}
       <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Search
@@ -421,7 +422,7 @@ export default function IngredientsPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search ingredients..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-base"
             />
           </div>
 
@@ -432,7 +433,7 @@ export default function IngredientsPage() {
             <select
               value={departmentFilter}
               onChange={(e) => setDepartmentFilter(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-base"
             >
               <option value="">All</option>
               {departments.map((dept) => (
@@ -443,78 +444,171 @@ export default function IngredientsPage() {
             </select>
           </div>
 
-          <div className="flex items-end">
-            <button
-              onClick={() => {
-                setSearch("");
-                setDepartmentFilter("");
-              }}
-              className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
-            >
-              Clear filters
-            </button>
-          </div>
+          {(search || departmentFilter) && (
+            <div className="flex items-end">
+              <button
+                onClick={() => {
+                  setSearch("");
+                  setDepartmentFilter("");
+                }}
+                className="px-4 py-2.5 text-gray-600 hover:text-gray-800 transition-colors"
+              >
+                Clear filters
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Selection Info Bar */}
       {selectedForMerge.size > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 flex items-center justify-between">
-          <div className="flex items-center">
-            <span className="text-blue-700 font-medium">
-              {selectedForMerge.size} ingredient{selectedForMerge.size > 1 ? "s" : ""} selected
-            </span>
-            <span className="text-blue-600 text-sm ml-2">
-              - Click &quot;Merge into this&quot; on the ingredient you want to keep
-            </span>
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <span className="text-blue-700 font-medium">
+                {selectedForMerge.size} ingredient{selectedForMerge.size > 1 ? "s" : ""} selected
+              </span>
+              <span className="text-blue-600 text-sm block sm:inline sm:ml-2">
+                Tap &quot;Merge&quot; on the ingredient to keep
+              </span>
+            </div>
+            <button
+              onClick={clearMergeSelection}
+              className="px-4 py-2 text-sm text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded-lg transition-colors self-start sm:self-auto"
+            >
+              Clear selection
+            </button>
           </div>
-          <button
-            onClick={clearMergeSelection}
-            className="px-3 py-1 text-sm text-blue-600 hover:text-blue-800 transition-colors"
-          >
-            Clear selection
-          </button>
         </div>
       )}
 
-      {/* Table */}
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="w-12 px-4 py-3">
-                  <span className="sr-only">Select</span>
-                </th>
-                <th
-                  className="px-4 py-3 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort("name")}
-                >
-                  Name <SortIcon field="name" />
-                </th>
-                <th
-                  className="px-4 py-3 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort("department")}
-                >
-                  Department <SortIcon field="department" />
-                </th>
-                <th
-                  className="px-4 py-3 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort("store")}
-                >
-                  Preferred Store <SortIcon field="store" />
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {filteredAndSortedIngredients.length === 0 ? (
+      {filteredAndSortedIngredients.length === 0 ? (
+        <div className="bg-white rounded-xl shadow-sm p-6 sm:p-8 text-center">
+          <p className="text-gray-500">No ingredients found</p>
+        </div>
+      ) : (
+        <>
+          {/* Mobile card view */}
+          <div className="md:hidden space-y-3">
+            {filteredAndSortedIngredients.map((ingredient) => (
+              <div
+                key={ingredient.id}
+                className={`bg-white rounded-xl shadow-sm p-4 ${
+                  selectedForMerge.has(ingredient.id) ? "ring-2 ring-blue-400 bg-blue-50" : ""
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  {/* Larger checkbox for mobile */}
+                  <label className="flex items-center justify-center w-10 h-10 -ml-1 -mt-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedForMerge.has(ingredient.id)}
+                      onChange={() => toggleMergeSelection(ingredient.id)}
+                      className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
+                    />
+                  </label>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <Link
+                        href={`/ingredients/${ingredient.id}`}
+                        className="text-emerald-600 hover:text-emerald-700 font-medium truncate"
+                      >
+                        {ingredient.name}
+                      </Link>
+                      {selectedForMerge.size > 0 && (
+                        <button
+                          onClick={() => handleManualMerge(ingredient.id)}
+                          disabled={isMergingManual || (selectedForMerge.has(ingredient.id) && selectedForMerge.size === 1)}
+                          className={`px-3 py-1.5 text-xs rounded-lg transition-colors flex-shrink-0 ${
+                            selectedForMerge.has(ingredient.id) && selectedForMerge.size === 1
+                              ? "bg-gray-100 text-gray-400"
+                              : "bg-emerald-600 text-white active:bg-emerald-700 disabled:opacity-50"
+                          }`}
+                        >
+                          {isMergingManual ? "..." : "Merge"}
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 mt-3">
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Department</label>
+                        <select
+                          value={ingredient.department || ""}
+                          onChange={(e) =>
+                            handleUpdateIngredient(ingredient.id, "department", e.target.value || null)
+                          }
+                          className="w-full text-sm border border-gray-200 rounded-lg py-2 px-2 bg-gray-50 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                        >
+                          <option value="">Select...</option>
+                          {departmentsList.map((dept) => (
+                            <option key={dept.id} value={dept.name}>
+                              {dept.name}
+                            </option>
+                          ))}
+                          {ingredient.department &&
+                            !departmentsList.some(d => d.name === ingredient.department) && (
+                              <option value={ingredient.department}>
+                                {ingredient.department}
+                              </option>
+                            )}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Store</label>
+                        <select
+                          value={ingredient.store?.id || ""}
+                          onChange={(e) =>
+                            handleUpdateIngredient(ingredient.id, "store_id", e.target.value || null)
+                          }
+                          className="w-full text-sm border border-gray-200 rounded-lg py-2 px-2 bg-gray-50 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                        >
+                          <option value="">Select...</option>
+                          {stores.map((store) => (
+                            <option key={store.id} value={store.id}>
+                              {store.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop table view */}
+          <div className="hidden md:block bg-white rounded-xl shadow-sm overflow-hidden">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b">
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
-                    No ingredients found
-                  </td>
+                  <th className="w-12 px-4 py-3">
+                    <span className="sr-only">Select</span>
+                  </th>
+                  <th
+                    className="px-4 py-3 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort("name")}
+                  >
+                    Name <SortIcon field="name" />
+                  </th>
+                  <th
+                    className="px-4 py-3 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort("department")}
+                  >
+                    Department <SortIcon field="department" />
+                  </th>
+                  <th
+                    className="px-4 py-3 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort("store")}
+                  >
+                    Preferred Store <SortIcon field="store" />
+                  </th>
                 </tr>
-              ) : (
-                filteredAndSortedIngredients.map((ingredient) => (
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {filteredAndSortedIngredients.map((ingredient) => (
                   <tr
                     key={ingredient.id}
                     className={`transition-colors ${
@@ -606,12 +700,12 @@ export default function IngredientsPage() {
                       </select>
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       {/* De-duplication Modal */}
       {showDedupeModal && (

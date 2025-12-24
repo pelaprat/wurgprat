@@ -117,10 +117,12 @@ export default function Navigation() {
                   )}
                 </div>
 
-                {/* Mobile menu button */}
+                {/* Mobile menu button - larger touch target */}
                 <button
-                  className="lg:hidden p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                  className="lg:hidden p-2.5 -mr-2 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 active:bg-gray-200 transition-colors"
                   onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                  aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
+                  aria-expanded={isMobileMenuOpen}
                 >
                   <svg
                     className="w-6 h-6"
@@ -159,17 +161,17 @@ export default function Navigation() {
 
         {/* Mobile menu */}
         {session && isMobileMenuOpen && (
-          <div className="lg:hidden py-4 border-t">
+          <div className="lg:hidden py-2 border-t">
             <div className="flex flex-col space-y-1">
               {navLinks.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
                   onClick={() => setIsMobileMenuOpen(false)}
-                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                  className={`px-4 py-3 rounded-lg text-base font-medium transition-colors ${
                     isActive(link.href)
                       ? "bg-emerald-50 text-emerald-700"
-                      : "text-gray-600 hover:text-emerald-600 hover:bg-gray-50"
+                      : "text-gray-600 hover:text-emerald-600 hover:bg-gray-50 active:bg-gray-100"
                   }`}
                 >
                   {link.label}
@@ -179,10 +181,10 @@ export default function Navigation() {
               <Link
                 href="/settings"
                 onClick={() => setIsMobileMenuOpen(false)}
-                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                className={`px-4 py-3 rounded-lg text-base font-medium transition-colors ${
                   isActive("/settings")
                     ? "bg-emerald-50 text-emerald-700"
-                    : "text-gray-600 hover:text-emerald-600 hover:bg-gray-50"
+                    : "text-gray-600 hover:text-emerald-600 hover:bg-gray-50 active:bg-gray-100"
                 }`}
               >
                 Settings
@@ -192,7 +194,7 @@ export default function Navigation() {
                   setIsMobileMenuOpen(false);
                   signOut();
                 }}
-                className="px-3 py-2 rounded-md text-sm font-medium text-left text-gray-600 hover:text-emerald-600 hover:bg-gray-50 transition-colors"
+                className="px-4 py-3 rounded-lg text-base font-medium text-left text-gray-600 hover:text-emerald-600 hover:bg-gray-50 active:bg-gray-100 transition-colors"
               >
                 Sign out
               </button>
