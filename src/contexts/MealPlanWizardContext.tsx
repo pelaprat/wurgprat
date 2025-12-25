@@ -5,10 +5,14 @@ import {
   useContext,
   useState,
   useCallback,
+  useEffect,
   ReactNode,
 } from "react";
 import { Event } from "./EventsContext";
 import { getNextSaturday } from "@/utils/dates";
+
+const WIZARD_STORAGE_KEY = "mealPlanWizard";
+const STORAGE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 // Types for the wizard
 export interface ProposedMeal {
@@ -116,6 +120,13 @@ interface MealPlanWizardContextType extends MealPlanWizardState {
 
   // Navigation/Reset
   resetWizard: () => void;
+
+  // Restore session
+  hasRestorable: boolean;
+  showRestoreModal: boolean;
+  setShowRestoreModal: (show: boolean) => void;
+  restoreSession: () => void;
+  discardSavedSession: () => void;
 }
 
 const MealPlanWizardContext = createContext<
@@ -139,6 +150,93 @@ const initialState: MealPlanWizardState = {
 
 export function MealPlanWizardProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<MealPlanWizardState>(initialState);
+  const [hasRestorable, setHasRestorable] = useState(false);
+  const [showRestoreModal, setShowRestoreModal] = useState(false);
+
+  // Check for restorable session on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(WIZARD_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const isValid = Date.now() - parsed.timestamp < STORAGE_TTL_MS;
+        const hasProgress = parsed.proposedMeals?.length > 0 || parsed.selectedRecipeIds?.length > 0;
+        if (isValid && hasProgress) {
+          setHasRestorable(true);
+          setShowRestoreModal(true);
+        } else {
+          localStorage.removeItem(WIZARD_STORAGE_KEY);
+        }
+      }
+    } catch {
+      localStorage.removeItem(WIZARD_STORAGE_KEY);
+    }
+  }, []);
+
+  // Auto-save state changes (debounced)
+  useEffect(() => {
+    // Only save if there's meaningful progress
+    const hasProgress = state.proposedMeals.length > 0 || state.selectedRecipeIds.length > 0;
+    if (!hasProgress) return;
+
+    const saveTimer = setTimeout(() => {
+      try {
+        localStorage.setItem(WIZARD_STORAGE_KEY, JSON.stringify({
+          weekOf: state.weekOf,
+          userDescription: state.userDescription,
+          selectedRecipeIds: state.selectedRecipeIds,
+          proposedMeals: state.proposedMeals,
+          groceryItems: state.groceryItems,
+          eventAssignments: state.eventAssignments,
+          aiExplanation: state.aiExplanation,
+          timestamp: Date.now()
+        }));
+      } catch {
+        // Storage full or unavailable - fail silently
+      }
+    }, 1000);
+
+    return () => clearTimeout(saveTimer);
+  }, [
+    state.weekOf,
+    state.userDescription,
+    state.selectedRecipeIds,
+    state.proposedMeals,
+    state.groceryItems,
+    state.eventAssignments,
+    state.aiExplanation
+  ]);
+
+  // Restore session from localStorage
+  const restoreSession = useCallback(() => {
+    try {
+      const saved = localStorage.getItem(WIZARD_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setState(prev => ({
+          ...prev,
+          weekOf: parsed.weekOf || prev.weekOf,
+          userDescription: parsed.userDescription || "",
+          selectedRecipeIds: parsed.selectedRecipeIds || [],
+          proposedMeals: parsed.proposedMeals || [],
+          groceryItems: parsed.groceryItems || [],
+          eventAssignments: parsed.eventAssignments || [],
+          aiExplanation: parsed.aiExplanation,
+        }));
+      }
+    } catch {
+      // Parse error - fail silently
+    }
+    setShowRestoreModal(false);
+    setHasRestorable(false);
+  }, []);
+
+  // Discard saved session
+  const discardSavedSession = useCallback(() => {
+    localStorage.removeItem(WIZARD_STORAGE_KEY);
+    setShowRestoreModal(false);
+    setHasRestorable(false);
+  }, []);
 
   // Phase 1 actions
   const setWeekOf = useCallback((date: string) => {
@@ -409,6 +507,9 @@ export function MealPlanWizardProvider({ children }: { children: ReactNode }) {
       ...initialState,
       weekOf: getNextSaturday(), // Recalculate next Saturday
     });
+    // Clear saved session
+    localStorage.removeItem(WIZARD_STORAGE_KEY);
+    setHasRestorable(false);
   }, []);
 
   return (
@@ -442,6 +543,11 @@ export function MealPlanWizardProvider({ children }: { children: ReactNode }) {
         setIsGeneratingGroceries,
         setIsFinalizing,
         resetWizard,
+        hasRestorable,
+        showRestoreModal,
+        setShowRestoreModal,
+        restoreSession,
+        discardSavedSession,
       }}
     >
       {children}

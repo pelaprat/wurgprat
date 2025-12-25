@@ -376,7 +376,39 @@ export default function GroceriesPage() {
         <h3 className="text-sm font-medium text-gray-900 mb-3">
           Add Additional Items
         </h3>
-        <div className="flex gap-3">
+        {/* Mobile layout - stacked */}
+        <div className="md:hidden space-y-3">
+          <input
+            type="text"
+            value={newItemName}
+            onChange={(e) => setNewItemName(e.target.value)}
+            placeholder="Item name (e.g., paper towels)"
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-base min-h-[44px]"
+            onKeyDown={(e) => e.key === "Enter" && handleAddItem()}
+          />
+          <div className="flex gap-3">
+            <select
+              value={newItemDepartment}
+              onChange={(e) => setNewItemDepartment(e.target.value)}
+              className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-base min-h-[44px]"
+            >
+              {DEPARTMENT_ORDER.map((dept) => (
+                <option key={dept} value={dept}>
+                  {dept}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={handleAddItem}
+              disabled={!newItemName.trim()}
+              className="px-6 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
+            >
+              Add
+            </button>
+          </div>
+        </div>
+        {/* Desktop layout - inline */}
+        <div className="hidden md:flex gap-3">
           <input
             type="text"
             value={newItemName}
@@ -414,7 +446,7 @@ export default function GroceriesPage() {
           <div className="flex gap-2">
             <button
               onClick={() => setSortBy("department")}
-              className={`px-3 py-1 text-xs rounded-full transition-colors ${
+              className={`px-3 py-2 md:py-1 text-xs rounded-full transition-colors min-h-[36px] md:min-h-0 ${
                 sortBy === "department"
                   ? "bg-emerald-100 text-emerald-800"
                   : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -424,7 +456,7 @@ export default function GroceriesPage() {
             </button>
             <button
               onClick={() => setSortBy("ingredient")}
-              className={`px-3 py-1 text-xs rounded-full transition-colors ${
+              className={`px-3 py-2 md:py-1 text-xs rounded-full transition-colors min-h-[36px] md:min-h-0 ${
                 sortBy === "ingredient"
                   ? "bg-emerald-100 text-emerald-800"
                   : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -434,7 +466,7 @@ export default function GroceriesPage() {
             </button>
             <button
               onClick={() => setSortBy("store")}
-              className={`px-3 py-1 text-xs rounded-full transition-colors ${
+              className={`px-3 py-2 md:py-1 text-xs rounded-full transition-colors min-h-[36px] md:min-h-0 ${
                 sortBy === "store"
                   ? "bg-emerald-100 text-emerald-800"
                   : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -445,8 +477,72 @@ export default function GroceriesPage() {
           </div>
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
+        {/* Mobile card layout */}
+        <div className="md:hidden p-3 space-y-3">
+          {sortedItems.map((item) => (
+            <div key={item.id} className="bg-white border rounded-xl p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-gray-900">
+                    {item.ingredientName}
+                    {item.isManualAdd && (
+                      <span className="ml-2 text-xs px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded">
+                        Added
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-sm text-gray-600 mt-1">
+                    {item.totalQuantity}
+                    {item.unit ? ` ${item.unit}` : ""} &bull; {item.department || "Other"}
+                  </div>
+                  {item.recipeBreakdown.length > 0 && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      For: {item.recipeBreakdown.map(b => b.recipeName).join(", ")}
+                    </div>
+                  )}
+                  {stores.length > 0 && (
+                    <div className="mt-3">
+                      <select
+                        value={item.storeId || ""}
+                        onChange={(e) => handleStoreChange(item.id, e.target.value)}
+                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white min-h-[44px]"
+                      >
+                        <option value="">No store</option>
+                        {stores.map((store) => (
+                          <option key={store.id} value={store.id}>
+                            {store.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={() => wizard.removeGroceryItem(item.id)}
+                  className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  title="Remove item"
+                >
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b bg-gray-50">
@@ -631,35 +727,40 @@ export default function GroceriesPage() {
         </div>
       )}
 
-      {/* Action buttons */}
-      <div className="mt-8 flex justify-between items-center">
-        <Link
-          href="/weekly-plans/create/events"
-          className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors flex items-center gap-2"
-        >
-          <span>&larr;</span>
-          Back to Events
-        </Link>
-        <button
-          onClick={handleFinalize}
-          disabled={isSubmitting}
-          className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-        >
-          {isSubmitting ? (
-            <>
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-              Creating Plan...
-            </>
-          ) : (
-            <>
-              Finalize Plan
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            </>
-          )}
-        </button>
+      {/* Action buttons - sticky on mobile */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-4 pb-safe md:relative md:border-0 md:p-0 md:mt-8 z-20">
+        <div className="flex justify-between items-center max-w-4xl mx-auto">
+          <Link
+            href="/weekly-plans/create/events"
+            className="px-4 py-3 text-gray-600 hover:text-gray-800 transition-colors flex items-center gap-2 min-h-[44px]"
+          >
+            <span>&larr;</span>
+            Back
+          </Link>
+          <button
+            onClick={handleFinalize}
+            disabled={isSubmitting}
+            className="px-6 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 min-h-[44px]"
+          >
+            {isSubmitting ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                Creating...
+              </>
+            ) : (
+              <>
+                Finalize Plan
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </>
+            )}
+          </button>
+        </div>
       </div>
+
+      {/* Padding for fixed bottom bar on mobile */}
+      <div className="h-24 md:hidden"></div>
     </div>
   );
 }

@@ -88,7 +88,7 @@ function EventCard({ event, assignedUserIds, householdMembers, onToggleUser }: E
             return (
               <label
                 key={member.id}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer transition-colors ${
+                className={`flex items-center gap-3 px-4 py-3 min-h-[44px] rounded-lg border cursor-pointer transition-colors ${
                   isAssigned
                     ? "border-emerald-300 bg-emerald-50"
                     : "border-gray-200 hover:bg-gray-50"
@@ -98,7 +98,7 @@ function EventCard({ event, assignedUserIds, householdMembers, onToggleUser }: E
                   type="checkbox"
                   checked={isAssigned}
                   onChange={() => onToggleUser(event.id, member.id)}
-                  className="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
+                  className="w-5 h-5 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
                 />
                 <span
                   className={`text-sm ${
@@ -417,28 +417,33 @@ export default function EventsPage() {
         </div>
       )}
 
-      {/* Action buttons */}
-      <div className="mt-8 flex justify-between items-center">
-        <Link
-          href="/weekly-plans/create/review"
-          className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors flex items-center gap-2"
-        >
-          <span>&larr;</span>
-          Back to Meals
-        </Link>
-        <button
-          onClick={handleContinue}
-          disabled={unassignedCount > 0}
-          className={`px-6 py-2 rounded-lg transition-colors flex items-center gap-2 ${
-            unassignedCount === 0
-              ? "bg-emerald-600 text-white hover:bg-emerald-700"
-              : "bg-gray-300 text-gray-500 cursor-not-allowed"
-          }`}
-        >
-          Continue to Groceries
-          <span className={unassignedCount === 0 ? "text-emerald-200" : "text-gray-400"}>&rarr;</span>
-        </button>
+      {/* Action buttons - sticky on mobile */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-4 pb-safe md:relative md:border-0 md:p-0 md:mt-8 z-20">
+        <div className="flex justify-between items-center max-w-4xl mx-auto">
+          <Link
+            href="/weekly-plans/create/review"
+            className="px-4 py-3 text-gray-600 hover:text-gray-800 transition-colors flex items-center gap-2 min-h-[44px]"
+          >
+            <span>&larr;</span>
+            Back
+          </Link>
+          <button
+            onClick={handleContinue}
+            disabled={unassignedCount > 0}
+            className={`px-6 py-3 rounded-lg transition-colors flex items-center gap-2 min-h-[44px] ${
+              unassignedCount === 0
+                ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                : "bg-gray-300 text-gray-500 cursor-not-allowed"
+            }`}
+          >
+            Continue
+            <span className={unassignedCount === 0 ? "text-emerald-200" : "text-gray-400"}>&rarr;</span>
+          </button>
+        </div>
       </div>
+
+      {/* Padding for fixed bottom bar on mobile */}
+      <div className="h-24 md:hidden"></div>
     </div>
   );
 }

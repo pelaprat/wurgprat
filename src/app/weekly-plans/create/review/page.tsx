@@ -30,20 +30,39 @@ interface HouseholdMember {
   picture?: string;
 }
 
+// Hook to detect mobile
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+
+  return isMobile;
+}
+
 interface DraggableMealProps {
   meal: ProposedMeal;
   onReplace: (mealId: string) => void;
   onRemove: (mealId: string) => void;
   onAssign: (mealId: string, userId: string | undefined) => void;
+  onMove: (meal: ProposedMeal) => void;
   isReplacing: boolean;
   canRemove: boolean;
   householdMembers: HouseholdMember[];
+  isMobile: boolean;
 }
 
-function DraggableMeal({ meal, onReplace, onRemove, onAssign, isReplacing, canRemove, householdMembers }: DraggableMealProps) {
+function DraggableMeal({ meal, onReplace, onRemove, onAssign, onMove, isReplacing, canRemove, householdMembers, isMobile }: DraggableMealProps) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `meal-${meal.mealId}`,
     data: { mealId: meal.mealId, day: meal.day },
+    disabled: isMobile, // Disable drag on mobile
   });
 
   const timeRating = meal.recipeTimeRating
@@ -59,27 +78,50 @@ function DraggableMeal({ meal, onReplace, onRemove, onAssign, isReplacing, canRe
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-2 flex-1 min-w-0">
-          {/* Drag handle */}
-          <button
-            {...attributes}
-            {...listeners}
-            className="cursor-grab active:cursor-grabbing p-1 hover:bg-gray-100 rounded transition-colors flex-shrink-0 mt-0.5"
-            title="Drag to swap with another meal"
-          >
-            <svg
-              className="w-4 h-4 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+          {/* Mobile: Move button with proper touch target */}
+          {isMobile ? (
+            <button
+              onClick={() => onMove(meal)}
+              className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-gray-100 rounded transition-colors flex-shrink-0 -ml-1"
+              title="Move to another day"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 8h16M4 16h16"
-              />
-            </svg>
-          </button>
+              <svg
+                className="w-5 h-5 text-gray-500"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+                />
+              </svg>
+            </button>
+          ) : (
+            /* Desktop: Drag handle */
+            <button
+              {...attributes}
+              {...listeners}
+              className="cursor-grab active:cursor-grabbing p-1 hover:bg-gray-100 rounded transition-colors flex-shrink-0 mt-0.5"
+              title="Drag to swap with another meal"
+            >
+              <svg
+                className="w-4 h-4 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 8h16M4 16h16"
+                />
+              </svg>
+            </button>
+          )}
 
           <div className="flex-1 min-w-0">
             <h3 className="font-medium text-gray-900">{meal.recipeName}</h3>
@@ -219,10 +261,12 @@ interface DaySlotProps {
   onReplace: (mealId: string) => void;
   onRemove: (mealId: string) => void;
   onAssign: (mealId: string, userId: string | undefined) => void;
+  onMove: (meal: ProposedMeal) => void;
   onAddMeal: (day: number, date: string) => void;
   replacingMealId: string | null;
   isDraggedOver: boolean;
   householdMembers: HouseholdMember[];
+  isMobile: boolean;
 }
 
 function DaySlot({
@@ -233,10 +277,12 @@ function DaySlot({
   onReplace,
   onRemove,
   onAssign,
+  onMove,
   onAddMeal,
   replacingMealId,
   isDraggedOver,
   householdMembers,
+  isMobile,
 }: DaySlotProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: `day-${day}`,
@@ -316,9 +362,11 @@ function DaySlot({
                 onReplace={onReplace}
                 onRemove={onRemove}
                 onAssign={onAssign}
+                onMove={onMove}
                 isReplacing={replacingMealId === meal.mealId}
                 canRemove={meals.length > 1}
                 householdMembers={householdMembers}
+                isMobile={isMobile}
               />
             ))}
           </>
@@ -347,12 +395,14 @@ export default function ReviewPage() {
   const { data: session } = useSession();
   const router = useRouter();
   const wizard = useMealPlanWizard();
+  const isMobile = useIsMobile();
 
   const [replacingMealId, setReplacingMealId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeDragMealId, setActiveDragMealId] = useState<string | null>(null);
   const [isAddingMeal, setIsAddingMeal] = useState(false);
   const [householdMembers, setHouseholdMembers] = useState<HouseholdMember[]>([]);
+  const [movingMeal, setMovingMeal] = useState<ProposedMeal | null>(null);
 
   // Fetch household members
   useEffect(() => {
@@ -512,6 +562,24 @@ export default function ReviewPage() {
   // Handle assign user to meal
   const handleAssignUser = (mealId: string, userId: string | undefined) => {
     wizard.updateMealById(mealId, { assignedUserId: userId });
+  };
+
+  // Handle opening move modal
+  const handleOpenMoveModal = (meal: ProposedMeal) => {
+    setMovingMeal(meal);
+  };
+
+  // Handle moving meal to a new day
+  const handleMoveMealToDay = (targetDay: number) => {
+    if (!movingMeal) return;
+    const weekDates = getWeekDates();
+    const newDate = weekDates[targetDay - 1];
+    wizard.updateMealById(movingMeal.mealId, {
+      day: targetDay,
+      date: newDate,
+      isAiSuggested: false,
+    });
+    setMovingMeal(null);
   };
 
   // Handle add meal to day
@@ -711,10 +779,12 @@ export default function ReviewPage() {
                 onReplace={handleReplaceMeal}
                 onRemove={handleRemoveMeal}
                 onAssign={handleAssignUser}
+                onMove={handleOpenMoveModal}
                 onAddMeal={handleAddMeal}
                 replacingMealId={replacingMealId}
                 isDraggedOver={false}
                 householdMembers={householdMembers}
+                isMobile={isMobile}
               />
             );
           })}
@@ -731,6 +801,70 @@ export default function ReviewPage() {
           <div className="bg-white rounded-lg p-4 flex items-center gap-3">
             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-emerald-600"></div>
             <span className="text-gray-700">Getting AI suggestion...</span>
+          </div>
+        </div>
+      )}
+
+      {/* Move meal modal - mobile only */}
+      {movingMeal && (
+        <div className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in slide-in-from-bottom duration-200 md:animate-none">
+            <div className="px-4 py-3 border-b bg-gray-50">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-gray-900">Move Meal</h3>
+                <button
+                  onClick={() => setMovingMeal(null)}
+                  className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                  <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <p className="text-sm text-gray-600 mt-1">
+                Move &quot;{movingMeal.recipeName}&quot; to:
+              </p>
+            </div>
+            <div className="p-4">
+              <div className="grid grid-cols-1 gap-2">
+                {weekDates.map((date, index) => {
+                  const day = index + 1;
+                  const isCurrentDay = movingMeal.day === day;
+                  const dayLabel = DAY_NAMES[index];
+                  const dateLabel = new Date(date + "T00:00:00").toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                  });
+
+                  return (
+                    <button
+                      key={day}
+                      onClick={() => handleMoveMealToDay(day)}
+                      disabled={isCurrentDay}
+                      className={`flex items-center justify-between px-4 py-3 rounded-lg min-h-[52px] transition-colors ${
+                        isCurrentDay
+                          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                          : "bg-gray-50 hover:bg-emerald-50 active:bg-emerald-100 text-gray-900"
+                      }`}
+                    >
+                      <span className="font-medium">{dayLabel}</span>
+                      <span className="text-sm text-gray-500">{dateLabel}</span>
+                      {isCurrentDay && (
+                        <span className="text-xs bg-gray-200 px-2 py-0.5 rounded">Current</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="px-4 py-3 border-t bg-gray-50">
+              <button
+                onClick={() => setMovingMeal(null)}
+                className="w-full py-3 text-gray-600 hover:text-gray-800 transition-colors min-h-[44px]"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -754,28 +888,33 @@ export default function ReviewPage() {
         </div>
       )}
 
-      {/* Action buttons */}
-      <div className="mt-8 flex justify-between items-center">
-        <Link
-          href="/weekly-plans/create/input"
-          className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors flex items-center gap-2"
-        >
-          <span>&larr;</span>
-          Back to Input
-        </Link>
-        <button
-          onClick={handleContinue}
-          disabled={!allMealsAssigned}
-          className={`px-6 py-2 rounded-lg transition-colors flex items-center gap-2 ${
-            allMealsAssigned
-              ? "bg-emerald-600 text-white hover:bg-emerald-700"
-              : "bg-gray-300 text-gray-500 cursor-not-allowed"
-          }`}
-        >
-          {wizard.weekEvents.length > 0 ? "Continue to Events" : "Continue to Groceries"}
-          <span className={allMealsAssigned ? "text-emerald-200" : "text-gray-400"}>&rarr;</span>
-        </button>
+      {/* Action buttons - sticky on mobile */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-4 pb-safe md:relative md:border-0 md:p-0 md:mt-8 z-20">
+        <div className="flex justify-between items-center max-w-4xl mx-auto">
+          <Link
+            href="/weekly-plans/create/input"
+            className="px-4 py-3 text-gray-600 hover:text-gray-800 transition-colors flex items-center gap-2 min-h-[44px]"
+          >
+            <span>&larr;</span>
+            Back
+          </Link>
+          <button
+            onClick={handleContinue}
+            disabled={!allMealsAssigned}
+            className={`px-6 py-3 rounded-lg transition-colors flex items-center gap-2 min-h-[44px] ${
+              allMealsAssigned
+                ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                : "bg-gray-300 text-gray-500 cursor-not-allowed"
+            }`}
+          >
+            {wizard.weekEvents.length > 0 ? "Continue" : "Continue"}
+            <span className={allMealsAssigned ? "text-emerald-200" : "text-gray-400"}>&rarr;</span>
+          </button>
+        </div>
       </div>
+
+      {/* Padding for fixed bottom bar on mobile */}
+      <div className="h-24 md:hidden"></div>
     </div>
   );
 }

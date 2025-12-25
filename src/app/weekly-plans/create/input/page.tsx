@@ -67,6 +67,7 @@ export default function InputPage() {
   const [categoryFilter, setCategoryFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"recipes" | "schedule">("recipes");
 
   // Fetch recipes and existing plans on mount
   useEffect(() => {
@@ -216,6 +217,42 @@ export default function InputPage() {
 
   return (
     <div className="max-w-7xl mx-auto">
+      {/* Restore Session Modal */}
+      {wizard.showRestoreModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Resume Previous Plan?</h3>
+                <p className="text-sm text-gray-500">You have an unfinished meal plan</p>
+              </div>
+            </div>
+            <p className="text-gray-600 mb-6">
+              We found a meal plan you were working on. Would you like to continue where you left off?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={wizard.discardSavedSession}
+                className="flex-1 px-4 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors min-h-[44px]"
+              >
+                Start Fresh
+              </button>
+              <button
+                onClick={wizard.restoreSession}
+                className="flex-1 px-4 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors min-h-[44px]"
+              >
+                Resume Plan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="mb-6">
         <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
@@ -308,10 +345,36 @@ export default function InputPage() {
         />
       </div>
 
-      {/* Main content - two columns */}
+      {/* Mobile tabs - shown only on mobile */}
+      <div className="lg:hidden mb-4">
+        <div className="flex border-b">
+          <button
+            onClick={() => setActiveTab("recipes")}
+            className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors min-h-[44px] ${
+              activeTab === "recipes"
+                ? "border-emerald-600 text-emerald-600"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            Select Recipes {wizard.selectedRecipeIds.length > 0 && `(${wizard.selectedRecipeIds.length})`}
+          </button>
+          <button
+            onClick={() => setActiveTab("schedule")}
+            className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors min-h-[44px] ${
+              activeTab === "schedule"
+                ? "border-emerald-600 text-emerald-600"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            View Schedule
+          </button>
+        </div>
+      </div>
+
+      {/* Main content - two columns on desktop, tabbed on mobile */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left column: Week Schedule */}
-        <div className="bg-white rounded-xl shadow-sm p-6">
+        {/* Left column: Week Schedule - hidden on mobile unless schedule tab is active */}
+        <div className={`bg-white rounded-xl shadow-sm p-6 ${activeTab !== "schedule" ? "hidden lg:block" : ""}`}>
           <h2 className="text-lg font-semibold text-gray-900 mb-2">
             This Week&apos;s Schedule
           </h2>
@@ -389,8 +452,8 @@ export default function InputPage() {
           </div>
         </div>
 
-        {/* Right column: Recipe selection */}
-        <div className="bg-white rounded-xl shadow-sm p-6">
+        {/* Right column: Recipe selection - hidden on mobile unless recipes tab is active */}
+        <div className={`bg-white rounded-xl shadow-sm p-6 ${activeTab !== "recipes" ? "hidden lg:block" : ""}`}>
           <h2 className="text-lg font-semibold text-gray-900 mb-2">
             Select Recipes
           </h2>
@@ -557,32 +620,37 @@ export default function InputPage() {
         </div>
       )}
 
-      {/* Action buttons */}
-      <div className="mt-6 flex justify-between items-center">
-        <Link
-          href="/weekly-plans"
-          className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
-        >
-          Cancel
-        </Link>
-        <button
-          onClick={handleGenerate}
-          disabled={wizard.isGenerating || selectedWeekHasPlan || recipes.length === 0}
-          className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-        >
-          {wizard.isGenerating ? (
-            <>
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-              Generating...
-            </>
-          ) : (
-            <>
-              Generate Meal Plan
-              <span className="text-emerald-200">-&gt;</span>
-            </>
-          )}
-        </button>
+      {/* Action buttons - sticky on mobile */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-4 pb-safe md:relative md:border-0 md:p-0 md:mt-6 z-20">
+        <div className="flex justify-between items-center max-w-7xl mx-auto">
+          <Link
+            href="/weekly-plans"
+            className="px-4 py-3 text-gray-600 hover:text-gray-800 transition-colors min-h-[44px] flex items-center"
+          >
+            Cancel
+          </Link>
+          <button
+            onClick={handleGenerate}
+            disabled={wizard.isGenerating || selectedWeekHasPlan || recipes.length === 0}
+            className="px-6 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 min-h-[44px]"
+          >
+            {wizard.isGenerating ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                Generating...
+              </>
+            ) : (
+              <>
+                Generate Meal Plan
+                <span className="text-emerald-200">&rarr;</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
+
+      {/* Padding for fixed bottom bar on mobile */}
+      <div className="h-24 md:hidden"></div>
     </div>
   );
 }
