@@ -3,8 +3,10 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import Providers from "@/components/Providers";
 import Navigation from "@/components/Navigation";
+import packageJson from "../../package.json";
 
 const inter = Inter({ subsets: ["latin"] });
+const appVersion = packageJson.version;
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -32,6 +34,9 @@ export default function RootLayout({
             <main className="flex-1 container mx-auto px-4 py-8">
               {children}
             </main>
+            <footer className="py-2 text-center text-xs text-gray-400">
+              v{appVersion}
+            </footer>
           </div>
         </Providers>
       </body>

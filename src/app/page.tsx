@@ -127,7 +127,7 @@ function HomeContent() {
         </p>
         <button
           onClick={() => signIn("google")}
-          className="bg-emerald-600 text-white px-8 py-3 rounded-lg text-lg font-medium hover:bg-emerald-700 transition-colors inline-flex items-center space-x-2"
+          className="bg-emerald-600 text-white px-8 py-3 rounded-lg text-lg font-medium hover:bg-emerald-700 active:scale-95 transition-all duration-150 ease-spring inline-flex items-center space-x-2"
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -139,17 +139,17 @@ function HomeContent() {
         </button>
 
         <div className="mt-16 grid md:grid-cols-3 gap-8 text-left">
-          <div className="p-6 bg-white rounded-xl shadow-sm">
+          <div className="p-6 bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow">
             <div className="text-3xl mb-3">📅</div>
             <h3 className="font-semibold text-lg mb-2">Weekly Planning</h3>
             <p className="text-gray-600">Plan meals for the whole week at a glance.</p>
           </div>
-          <div className="p-6 bg-white rounded-xl shadow-sm">
+          <div className="p-6 bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow">
             <div className="text-3xl mb-3">🛒</div>
             <h3 className="font-semibold text-lg mb-2">Smart Grocery Lists</h3>
             <p className="text-gray-600">Auto-generate shopping lists from your meal plan.</p>
           </div>
-          <div className="p-6 bg-white rounded-xl shadow-sm">
+          <div className="p-6 bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow">
             <div className="text-3xl mb-3">👨‍👩‍👧‍👦</div>
             <h3 className="font-semibold text-lg mb-2">Family Coordination</h3>
             <p className="text-gray-600">Assign cooking duties and track who&apos;s doing what.</p>
@@ -168,7 +168,7 @@ function HomeContent() {
     <div className="max-w-3xl mx-auto">
       {/* Notification toast */}
       {notification && (
-        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50">
+        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 animate-slideDown">
           <div className="bg-emerald-600 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-3">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -348,7 +348,7 @@ function HomeContent() {
             {todayData?.weeklyPlan && (
               <Link
                 href={`/weekly-plans/${todayData.weeklyPlan.id}?tab=grocery`}
-                className="flex items-center justify-between bg-white rounded-xl border border-gray-200 px-5 py-4 hover:border-emerald-300 hover:bg-emerald-50/50 transition-colors group"
+                className="flex items-center justify-between bg-white rounded-xl border border-gray-200 px-5 py-4 hover:border-emerald-300 hover:bg-emerald-50/50 active:scale-[0.98] transition-all duration-150 ease-spring group"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center group-hover:bg-emerald-200 transition-colors">
@@ -370,7 +370,7 @@ function HomeContent() {
             <div className="flex items-center justify-center gap-6">
               <Link
                 href="/weekly-plans/create"
-                className="flex items-center gap-2 text-gray-600 hover:text-emerald-600 transition-colors"
+                className="flex items-center gap-2 text-gray-600 hover:text-emerald-600 active:scale-95 transition-all duration-150 ease-spring p-2 -m-2 rounded-lg"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -379,7 +379,7 @@ function HomeContent() {
               </Link>
               <Link
                 href="/weekly-plans"
-                className="flex items-center gap-2 text-gray-600 hover:text-emerald-600 transition-colors"
+                className="flex items-center gap-2 text-gray-600 hover:text-emerald-600 active:scale-95 transition-all duration-150 ease-spring p-2 -m-2 rounded-lg"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -388,7 +388,7 @@ function HomeContent() {
               </Link>
               <Link
                 href="/recipes"
-                className="flex items-center gap-2 text-gray-600 hover:text-emerald-600 transition-colors"
+                className="flex items-center gap-2 text-gray-600 hover:text-emerald-600 active:scale-95 transition-all duration-150 ease-spring p-2 -m-2 rounded-lg"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
