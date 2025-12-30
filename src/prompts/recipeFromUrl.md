@@ -1,5 +1,12 @@
 Extract recipe information from this webpage content. The URL is: {{url}}
 
+IMPORTANT: Only extract ingredients from the MAIN RECIPE on this page. You must IGNORE:
+- User comments and reviews
+- Reader modifications or substitutions mentioned in comments
+- Related recipes or "you might also like" suggestions
+- Ingredient variations suggested by commenters
+- Any content that appears after the main recipe instructions
+
 Return a JSON object with this structure:
 {
   "name": "Recipe Name",
@@ -21,6 +28,7 @@ Guidelines:
   - "quantity" should be a number or null if not specified
   - "unit" should be the unit of measure (e.g., "cups", "tbsp", "lbs") or null
   - "notes" should include preparation notes like "diced", "room temperature" or null
+  - ONLY include ingredients that are part of the original recipe, not user suggestions
 
 Only return the JSON object, no other text.
 

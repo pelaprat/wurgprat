@@ -21,7 +21,7 @@ interface ExtractedRecipe {
   ingredients: ExtractedIngredient[];
 }
 
-// Fetch a webpage and extract its text content
+// Fetch a webpage and return raw HTML
 async function fetchWebPage(url: string): Promise<string> {
   // Validate URL to prevent SSRF attacks
   const validation = validateExternalUrl(url);
@@ -32,7 +32,7 @@ async function fetchWebPage(url: string): Promise<string> {
   const response = await fetchWithTimeout(url, {
     headers: {
       "User-Agent":
-        "Mozilla/5.0 (compatible; MealPlannerBot/1.0; +https://mealplanner.app)",
+        "Mozilla/5.0 (compatible; WurgpratBot/1.0; +https://wurgprat.app)",
       "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     },
   }, 30000);
@@ -41,13 +41,212 @@ async function fetchWebPage(url: string): Promise<string> {
     throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
   }
 
-  const html = await response.text();
+  return await response.text();
+}
 
-  // Basic HTML to text conversion - remove scripts, styles, and tags
-  const text = html
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+// Try to extract recipe from JSON-LD structured data (schema.org Recipe)
+function extractJsonLdRecipe(html: string): ExtractedRecipe | null {
+  // Find all JSON-LD script blocks
+  const jsonLdRegex = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let match;
+
+  while ((match = jsonLdRegex.exec(html)) !== null) {
+    try {
+      const jsonContent = match[1].trim();
+      const data = JSON.parse(jsonContent);
+
+      // Handle both single objects and arrays (some sites use @graph)
+      const items = Array.isArray(data) ? data : data["@graph"] ? data["@graph"] : [data];
+
+      for (const item of items) {
+        if (item["@type"] === "Recipe" || (Array.isArray(item["@type"]) && item["@type"].includes("Recipe"))) {
+          console.log("[create-from-url] Found JSON-LD Recipe schema");
+          return parseJsonLdRecipe(item);
+        }
+      }
+    } catch {
+      // Invalid JSON, continue to next block
+      continue;
+    }
+  }
+
+  return null;
+}
+
+// Parse a JSON-LD Recipe object into our format
+function parseJsonLdRecipe(recipe: Record<string, unknown>): ExtractedRecipe {
+  const ingredients: ExtractedIngredient[] = [];
+
+  // Parse recipeIngredient array
+  const recipeIngredients = recipe.recipeIngredient;
+  if (Array.isArray(recipeIngredients)) {
+    for (const ing of recipeIngredients) {
+      if (typeof ing === "string") {
+        const parsed = parseIngredientString(ing);
+        ingredients.push(parsed);
+      }
+    }
+  }
+
+  // Get description - could be string or object
+  let description = "";
+  if (typeof recipe.description === "string") {
+    description = recipe.description;
+  }
+
+  // Get name
+  const name = typeof recipe.name === "string" ? recipe.name : "Untitled Recipe";
+
+  // Try to determine cuisine from keywords or recipeCuisine
+  let cuisine = "Other";
+  if (typeof recipe.recipeCuisine === "string") {
+    cuisine = recipe.recipeCuisine;
+  } else if (Array.isArray(recipe.recipeCuisine) && recipe.recipeCuisine.length > 0) {
+    cuisine = String(recipe.recipeCuisine[0]);
+  }
+
+  // Try to determine category from recipeCategory
+  let category = "entree";
+  if (typeof recipe.recipeCategory === "string") {
+    category = recipe.recipeCategory.toLowerCase();
+  } else if (Array.isArray(recipe.recipeCategory) && recipe.recipeCategory.length > 0) {
+    category = String(recipe.recipeCategory[0]).toLowerCase();
+  }
+
+  return {
+    name,
+    description,
+    category: normalizeCategory(category),
+    cuisine,
+    ingredients,
+  };
+}
+
+// Parse an ingredient string like "2 cups flour, sifted" into components
+function parseIngredientString(str: string): ExtractedIngredient {
+  const trimmed = str.trim();
+
+  // Common patterns: "2 cups flour", "1/2 tsp salt", "3 large eggs"
+  // Try to extract quantity, unit, and name
+  const quantityPattern = /^([\d./\s]+(?:\s*-\s*[\d./]+)?)\s*/;
+  const unitPattern = /^(cups?|tbsp|tsp|tablespoons?|teaspoons?|oz|ounces?|lbs?|pounds?|g|grams?|kg|ml|liters?|quarts?|pints?|gallons?|cloves?|pieces?|slices?|cans?|packages?|bunch(?:es)?|heads?|stalks?|sprigs?|pinch(?:es)?|dash(?:es)?|large|medium|small)\s+/i;
+
+  let remaining = trimmed;
+  let quantity: number | null = null;
+  let unit: string | null = null;
+
+  // Extract quantity
+  const qMatch = remaining.match(quantityPattern);
+  if (qMatch) {
+    const qStr = qMatch[1].trim();
+    // Handle fractions like "1/2" or "1 1/2"
+    quantity = parseFraction(qStr);
+    remaining = remaining.slice(qMatch[0].length);
+  }
+
+  // Extract unit
+  const uMatch = remaining.match(unitPattern);
+  if (uMatch) {
+    unit = uMatch[1].toLowerCase();
+    remaining = remaining.slice(uMatch[0].length);
+  }
+
+  // The rest is the ingredient name, possibly with notes in parentheses
+  let name = remaining;
+  let notes: string | null = null;
+
+  // Extract notes from parentheses
+  const parenMatch = name.match(/\(([^)]+)\)/);
+  if (parenMatch) {
+    notes = parenMatch[1].trim();
+    name = name.replace(/\([^)]+\)/, "").trim();
+  }
+
+  // Also check for comma-separated notes like "flour, sifted"
+  const commaIndex = name.indexOf(",");
+  if (commaIndex > 0) {
+    const possibleNotes = name.slice(commaIndex + 1).trim();
+    name = name.slice(0, commaIndex).trim();
+    notes = notes ? `${notes}, ${possibleNotes}` : possibleNotes;
+  }
+
+  return {
+    name: name || trimmed,
+    quantity,
+    unit,
+    notes,
+  };
+}
+
+// Parse fraction strings like "1/2", "1 1/2", "2"
+function parseFraction(str: string): number | null {
+  const parts = str.trim().split(/\s+/);
+  let total = 0;
+
+  for (const part of parts) {
+    if (part.includes("/")) {
+      const [num, denom] = part.split("/");
+      const n = parseFloat(num);
+      const d = parseFloat(denom);
+      if (!isNaN(n) && !isNaN(d) && d !== 0) {
+        total += n / d;
+      }
+    } else {
+      const n = parseFloat(part);
+      if (!isNaN(n)) {
+        total += n;
+      }
+    }
+  }
+
+  return total > 0 ? total : null;
+}
+
+// Clean HTML by removing noise (comments, sidebars, etc.) before text extraction
+function cleanHtmlForExtraction(html: string): string {
+  let cleaned = html;
+
+  // Remove script and style tags
+  cleaned = cleaned.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "");
+  cleaned = cleaned.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "");
+  cleaned = cleaned.replace(/<noscript[^>]*>[\s\S]*?<\/noscript>/gi, "");
+
+  // Remove comment sections (common patterns)
+  // Match elements with id/class containing "comment"
+  cleaned = cleaned.replace(/<(?:div|section|aside|footer)[^>]*(?:id|class)=["'][^"']*comment[^"']*["'][^>]*>[\s\S]*?<\/(?:div|section|aside|footer)>/gi, "");
+  cleaned = cleaned.replace(/<(?:div|section|aside|footer)[^>]*(?:id|class)=["'][^"']*review[^"']*["'][^>]*>[\s\S]*?<\/(?:div|section|aside|footer)>/gi, "");
+  cleaned = cleaned.replace(/<(?:div|section|aside|footer)[^>]*(?:id|class)=["'][^"']*respond[^"']*["'][^>]*>[\s\S]*?<\/(?:div|section|aside|footer)>/gi, "");
+
+  // Remove sidebars and related content
+  cleaned = cleaned.replace(/<aside[^>]*>[\s\S]*?<\/aside>/gi, "");
+  cleaned = cleaned.replace(/<(?:div|section)[^>]*(?:id|class)=["'][^"']*sidebar[^"']*["'][^>]*>[\s\S]*?<\/(?:div|section)>/gi, "");
+  cleaned = cleaned.replace(/<(?:div|section)[^>]*(?:id|class)=["'][^"']*related[^"']*["'][^>]*>[\s\S]*?<\/(?:div|section)>/gi, "");
+  cleaned = cleaned.replace(/<(?:div|section)[^>]*(?:id|class)=["'][^"']*recommended[^"']*["'][^>]*>[\s\S]*?<\/(?:div|section)>/gi, "");
+
+  // Remove footer
+  cleaned = cleaned.replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, "");
+
+  // Remove nav
+  cleaned = cleaned.replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, "");
+
+  // Remove header (but keep h1, h2, etc.)
+  cleaned = cleaned.replace(/<header[^>]*>[\s\S]*?<\/header>/gi, "");
+
+  // Remove ad sections
+  cleaned = cleaned.replace(/<(?:div|section)[^>]*(?:id|class)=["'][^"']*(?:ad-|ads-|advert|sponsor|promo)[^"']*["'][^>]*>[\s\S]*?<\/(?:div|section)>/gi, "");
+
+  // Remove social sharing sections
+  cleaned = cleaned.replace(/<(?:div|section)[^>]*(?:id|class)=["'][^"']*(?:share|social)[^"']*["'][^>]*>[\s\S]*?<\/(?:div|section)>/gi, "");
+
+  // Now convert to text
+  const text = cleaned
     .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
     .replace(/\s+/g, " ")
     .trim();
 
@@ -164,15 +363,26 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Step 1: Fetch the web page
+    // Step 1: Fetch the web page (raw HTML)
     console.log(`[create-from-url] Fetching URL: ${url}`);
-    const pageContent = await fetchWebPage(url);
-    console.log(`[create-from-url] Fetched ${pageContent.length} characters`);
+    const html = await fetchWebPage(url);
+    console.log(`[create-from-url] Fetched ${html.length} characters of HTML`);
 
-    // Step 2: Extract recipe data with AI
-    console.log(`[create-from-url] Extracting recipe with Gemini...`);
-    const extracted = await extractRecipeWithAI(pageContent, url);
-    console.log(`[create-from-url] Extracted recipe: ${extracted.name}`);
+    // Step 2: Try JSON-LD extraction first (most reliable)
+    let extracted = extractJsonLdRecipe(html);
+    let extractionMethod = "json-ld";
+
+    if (extracted && extracted.ingredients.length > 0) {
+      console.log(`[create-from-url] Extracted recipe from JSON-LD: ${extracted.name} (${extracted.ingredients.length} ingredients)`);
+    } else {
+      // Fall back to AI extraction with cleaned HTML
+      console.log(`[create-from-url] No JSON-LD found, falling back to AI extraction...`);
+      const cleanedContent = cleanHtmlForExtraction(html);
+      console.log(`[create-from-url] Cleaned content: ${cleanedContent.length} characters`);
+      extracted = await extractRecipeWithAI(cleanedContent, url);
+      extractionMethod = "ai";
+      console.log(`[create-from-url] AI extracted recipe: ${extracted.name}`);
+    }
 
     // Step 3: Check if recipe already exists
     const { data: existing } = await supabase
@@ -356,9 +566,9 @@ Return ONLY the JSON array, no other text. Example: ["existing ingredient 1", nu
       },
       debug: {
         urlFetched: url,
-        contentLength: pageContent.length,
-        contentPreview: pageContent.slice(0, 500) + "...",
-        aiExtraction: extracted,
+        extractionMethod,
+        htmlLength: html.length,
+        extraction: extracted,
         ingredientsCreated,
       },
     });

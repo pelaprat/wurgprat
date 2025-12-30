@@ -14,7 +14,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Meal Planner",
+  title: "Wurgprat",
   description: "Plan your weekly meals and groceries together",
 };
 

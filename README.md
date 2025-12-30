@@ -1,4 +1,4 @@
-# Household Manager
+# Wurgprat
 
 A web app for household management including meal planning, recipes, groceries, and more - with Google Calendar and Drive integration.
 
@@ -28,7 +28,7 @@ A web app for household management including meal planning, recipes, groceries, 
 
 ```bash
 git clone <your-repo-url>
-cd household-manager
+cd wurgprat
 npm install
 ```
 
@@ -137,7 +137,7 @@ Once deployed:
 ## Project Structure
 
 ```
-household-manager/
+wurgprat/
 ├── src/
 │   ├── app/
 │   │   ├── api/auth/[...nextauth]/  # Auth endpoint
