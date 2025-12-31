@@ -216,21 +216,16 @@ export default function Navigation() {
             <div className="flex flex-col h-[calc(100%-4rem)] overflow-y-auto">
               {/* Navigation links */}
               <nav className="flex-1 px-3 py-4 space-y-1">
-                {navLinks.map((link, index) => (
+                {navLinks.map((link) => (
                   <Link
                     key={link.href}
                     href={link.href}
                     onClick={() => setIsMobileMenuOpen(false)}
-                    className={`flex items-center px-4 py-3.5 rounded-xl text-base font-medium transition-all touch-feedback ${
-                      isMobileMenuOpen ? "animate-slideDown" : ""
-                    } ${
+                    className={`flex items-center px-4 py-3.5 rounded-xl text-base font-medium transition-colors touch-feedback ${
                       isActive(link.href)
                         ? "bg-emerald-50 text-emerald-700"
                         : "text-gray-700 hover:bg-gray-50 active:bg-gray-100"
                     }`}
-                    style={{
-                      animationDelay: isMobileMenuOpen ? `${index * 50}ms` : "0ms",
-                    }}
                   >
                     {link.label}
                     <svg

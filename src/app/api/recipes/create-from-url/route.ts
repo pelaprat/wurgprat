@@ -458,16 +458,20 @@ ${extractedNames.map((name, i) => `${i + 1}. ${name}`).join("\n")}
 For each ingredient to match, find the best matching existing ingredient if one exists.
 Consider these as matches:
 - Plural/singular variations (e.g., "tomato" = "tomatoes")
-- With/without modifiers (e.g., "olive oil" = "extra virgin olive oil", "chicken breast" = "boneless skinless chicken breasts")
-- Common variations (e.g., "garlic" = "garlic cloves", "butter" = "unsalted butter")
+- Preparation modifiers that don't change the core ingredient (e.g., "garlic" = "garlic cloves", "onion" = "diced onion")
+
+DO NOT match these as the same ingredient:
+- Different varieties/types (e.g., "olive oil" ≠ "vegetable oil", "chicken breast" ≠ "chicken thighs")
+- Temperature/state modifiers that matter (e.g., "cold water" ≠ "water" - these are often separate ingredients in a recipe)
+- Different forms (e.g., "butter" ≠ "melted butter" if both appear in the recipe)
+- Different seasonings (e.g., "salt" ≠ "kosher salt" if both could be used differently)
 
 Return a JSON array where each element corresponds to an ingredient to match.
 Each element should be either:
 - The EXACT name from the existing ingredients list (if a good match exists)
 - null (if no good match exists and a new ingredient should be created)
 
-Only match if you're confident it's the same core ingredient. Don't match different ingredients.
-For example, "chicken breast" should NOT match "chicken thighs" - these are different cuts.
+Be CONSERVATIVE - when in doubt, return null. It's better to create a new ingredient than to incorrectly merge two distinct ingredients.
 
 Return ONLY the JSON array, no other text. Example: ["existing ingredient 1", null, "existing ingredient 3"]`;
 
@@ -510,7 +514,11 @@ Return ONLY the JSON array, no other text. Example: ["existing ingredient 1", nu
     }
 
     // Step 6: Create/link ingredients
+    // Track linked ingredient IDs to avoid duplicate constraint violations
+    const linkedIngredientIds = new Set<string>();
     let ingredientsCreated = 0;
+    let ingredientsSkipped = 0;
+
     for (let j = 0; j < extracted.ingredients.length; j++) {
       const ing = extracted.ingredients[j];
       if (!ing.name) continue;
@@ -538,6 +546,13 @@ Return ONLY the JSON array, no other text. Example: ["existing ingredient 1", nu
       }
 
       if (ingredientId) {
+        // Check if this ingredient has already been linked (due to fuzzy matching collisions)
+        if (linkedIngredientIds.has(ingredientId)) {
+          console.log(`[create-from-url] Skipping duplicate ingredient link: "${ing.name}" -> ${ingredientId}`);
+          ingredientsSkipped++;
+          continue;
+        }
+
         const { error: linkError } = await supabase
           .from("recipe_ingredients")
           .insert({
@@ -551,11 +566,14 @@ Return ONLY the JSON array, no other text. Example: ["existing ingredient 1", nu
 
         if (!linkError) {
           ingredientsCreated++;
+          linkedIngredientIds.add(ingredientId);
+        } else {
+          console.error(`[create-from-url] Failed to link ingredient "${ing.name}":`, linkError.message);
         }
       }
     }
 
-    console.log(`[create-from-url] Created/linked ${ingredientsCreated} ingredients`);
+    console.log(`[create-from-url] Created/linked ${ingredientsCreated} ingredients, skipped ${ingredientsSkipped} duplicates`);
 
     // Return success with debug info
     return NextResponse.json({
@@ -570,6 +588,7 @@ Return ONLY the JSON array, no other text. Example: ["existing ingredient 1", nu
         htmlLength: html.length,
         extraction: extracted,
         ingredientsCreated,
+        ingredientsSkipped,
       },
     });
   } catch (error) {

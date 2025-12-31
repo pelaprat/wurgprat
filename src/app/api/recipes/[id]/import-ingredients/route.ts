@@ -18,6 +18,107 @@ interface ExtractedRecipeData {
   ingredients: ExtractedIngredient[];
 }
 
+// Parse an ingredient string like "2 cups flour, sifted" into components
+function parseIngredientString(str: string): ExtractedIngredient {
+  const trimmed = str.trim();
+  const quantityPattern = /^([\d./\s]+(?:\s*-\s*[\d./]+)?)\s*/;
+  const unitPattern = /^(cups?|tbsp|tsp|tablespoons?|teaspoons?|oz|ounces?|lbs?|pounds?|g|grams?|kg|ml|liters?|quarts?|pints?|gallons?|cloves?|pieces?|slices?|cans?|packages?|bunch(?:es)?|heads?|stalks?|sprigs?|pinch(?:es)?|dash(?:es)?|large|medium|small)\s+/i;
+
+  let remaining = trimmed;
+  let quantity: number | string | undefined = undefined;
+  let unit: string | undefined = undefined;
+
+  const qMatch = remaining.match(quantityPattern);
+  if (qMatch) {
+    quantity = qMatch[1].trim();
+    remaining = remaining.slice(qMatch[0].length);
+  }
+
+  const uMatch = remaining.match(unitPattern);
+  if (uMatch) {
+    unit = uMatch[1].toLowerCase();
+    remaining = remaining.slice(uMatch[0].length);
+  }
+
+  let name = remaining;
+  let notes: string | undefined = undefined;
+
+  const parenMatch = name.match(/\(([^)]+)\)/);
+  if (parenMatch) {
+    notes = parenMatch[1].trim();
+    name = name.replace(/\([^)]+\)/, "").trim();
+  }
+
+  const commaIndex = name.indexOf(",");
+  if (commaIndex > 0) {
+    const possibleNotes = name.slice(commaIndex + 1).trim();
+    name = name.slice(0, commaIndex).trim();
+    notes = notes ? `${notes}, ${possibleNotes}` : possibleNotes;
+  }
+
+  return { name: name || trimmed, quantity, unit, notes };
+}
+
+// Try to extract recipe data from JSON-LD structured data (schema.org Recipe)
+function extractJsonLdRecipe(html: string): ExtractedRecipeData | null {
+  const jsonLdRegex = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let match;
+
+  while ((match = jsonLdRegex.exec(html)) !== null) {
+    try {
+      const jsonContent = match[1].trim();
+      const data = JSON.parse(jsonContent);
+      const items = Array.isArray(data) ? data : data["@graph"] ? data["@graph"] : [data];
+
+      for (const item of items) {
+        if (item["@type"] === "Recipe" || (Array.isArray(item["@type"]) && item["@type"].includes("Recipe"))) {
+          console.log("[import-ingredients] Found JSON-LD Recipe schema");
+
+          const ingredients: ExtractedIngredient[] = [];
+          const recipeIngredients = item.recipeIngredient;
+          if (Array.isArray(recipeIngredients)) {
+            for (const ing of recipeIngredients) {
+              if (typeof ing === "string") {
+                ingredients.push(parseIngredientString(ing));
+              }
+            }
+          }
+
+          let description = "";
+          if (typeof item.description === "string") {
+            description = item.description;
+          }
+
+          let cuisine = "Other";
+          if (typeof item.recipeCuisine === "string") {
+            cuisine = item.recipeCuisine;
+          } else if (Array.isArray(item.recipeCuisine) && item.recipeCuisine.length > 0) {
+            cuisine = String(item.recipeCuisine[0]);
+          }
+
+          let category = "entree";
+          if (typeof item.recipeCategory === "string") {
+            category = item.recipeCategory.toLowerCase();
+          } else if (Array.isArray(item.recipeCategory) && item.recipeCategory.length > 0) {
+            category = String(item.recipeCategory[0]).toLowerCase();
+          }
+
+          const validCategories = ["entree", "side", "dessert", "appetizer", "breakfast", "soup", "salad", "beverage"];
+          if (!validCategories.includes(category)) {
+            category = "entree";
+          }
+
+          return { description, category, cuisine, ingredients };
+        }
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
 // Helper to parse fraction strings like "1/2" to decimal
 function parseFraction(value: number | string | undefined | null): number | undefined {
   if (value === undefined || value === null) return undefined;
@@ -120,13 +221,21 @@ export async function POST(
     }
 
     const html = await pageResponse.text();
-    console.log("Fetched HTML length:", html.length);
+    console.log("[import-ingredients] Fetched HTML length:", html.length);
 
-    // Use Gemini to extract ingredients
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    // Try JSON-LD extraction first (most reliable)
+    let extractedData = extractJsonLdRecipe(html);
 
-    const prompt = `Extract recipe information from this webpage. Return a JSON object with the following structure:
+    if (extractedData && extractedData.ingredients.length > 0) {
+      console.log(`[import-ingredients] Extracted ${extractedData.ingredients.length} ingredients from JSON-LD`);
+    } else {
+      // Fall back to AI extraction
+      console.log("[import-ingredients] No JSON-LD found, falling back to AI extraction");
+
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+      const prompt = `Extract recipe information from this webpage. Return a JSON object with the following structure:
 {
   "description": "A refined 1-2 sentence description of the recipe, written in an appealing way",
   "category": "one of: entree, side, dessert, appetizer, breakfast, soup, salad, beverage",
@@ -157,45 +266,45 @@ Return ONLY the JSON object, no other text.
 HTML content:
 ${html.slice(0, 50000)}`;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
 
-    // Parse the response
-    const responseText = response.text();
+      // Parse the response
+      const responseText = response.text();
 
-    // Extract JSON from the response (handle potential markdown code blocks)
-    let jsonStr = responseText.trim();
-    if (jsonStr.startsWith("```json")) {
-      jsonStr = jsonStr.slice(7);
-    } else if (jsonStr.startsWith("```")) {
-      jsonStr = jsonStr.slice(3);
-    }
-    if (jsonStr.endsWith("```")) {
-      jsonStr = jsonStr.slice(0, -3);
-    }
-    jsonStr = jsonStr.trim();
+      // Extract JSON from the response (handle potential markdown code blocks)
+      let jsonStr = responseText.trim();
+      if (jsonStr.startsWith("```json")) {
+        jsonStr = jsonStr.slice(7);
+      } else if (jsonStr.startsWith("```")) {
+        jsonStr = jsonStr.slice(3);
+      }
+      if (jsonStr.endsWith("```")) {
+        jsonStr = jsonStr.slice(0, -3);
+      }
+      jsonStr = jsonStr.trim();
 
-    let extractedData: ExtractedRecipeData;
-    try {
-      const parsed = JSON.parse(jsonStr);
+      try {
+        const parsed = JSON.parse(jsonStr);
 
-      // Normalize category
-      const validCategories = ["entree", "side", "dessert", "appetizer", "breakfast", "soup", "salad", "beverage"];
-      const category = validCategories.includes(String(parsed.category || "").toLowerCase())
-        ? String(parsed.category).toLowerCase()
-        : "entree";
+        // Normalize category
+        const validCategories = ["entree", "side", "dessert", "appetizer", "breakfast", "soup", "salad", "beverage"];
+        const category = validCategories.includes(String(parsed.category || "").toLowerCase())
+          ? String(parsed.category).toLowerCase()
+          : "entree";
 
-      extractedData = {
-        description: String(parsed.description || ""),
-        category,
-        cuisine: String(parsed.cuisine || "Other"),
-        ingredients: Array.isArray(parsed.ingredients) ? parsed.ingredients : [],
-      };
-    } catch {
-      return NextResponse.json(
-        { error: "Failed to parse recipe data from AI response" },
-        { status: 500 }
-      );
+        extractedData = {
+          description: String(parsed.description || ""),
+          category,
+          cuisine: String(parsed.cuisine || "Other"),
+          ingredients: Array.isArray(parsed.ingredients) ? parsed.ingredients : [],
+        };
+      } catch {
+        return NextResponse.json(
+          { error: "Failed to parse recipe data from AI response" },
+          { status: 500 }
+        );
+      }
     }
 
     const extractedIngredients = extractedData.ingredients;
@@ -241,6 +350,10 @@ ${html.slice(0, 50000)}`;
       const extractedNames = extractedIngredients.map(ing => ing.name);
       const existingNames = existingIngredients.map(ing => ing.name);
 
+      // Initialize Gemini for fuzzy matching
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+      const matchModel = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
       const matchPrompt = `You are matching recipe ingredients to an existing ingredient database.
 
 EXISTING INGREDIENTS IN DATABASE:
@@ -252,21 +365,25 @@ ${extractedNames.map((name, i) => `${i + 1}. ${name}`).join("\n")}
 For each ingredient to match, find the best matching existing ingredient if one exists.
 Consider these as matches:
 - Plural/singular variations (e.g., "tomato" = "tomatoes")
-- With/without modifiers (e.g., "olive oil" = "extra virgin olive oil", "chicken breast" = "boneless skinless chicken breasts")
-- Common variations (e.g., "garlic" = "garlic cloves", "butter" = "unsalted butter")
+- Preparation modifiers that don't change the core ingredient (e.g., "garlic" = "garlic cloves", "onion" = "diced onion")
+
+DO NOT match these as the same ingredient:
+- Different varieties/types (e.g., "olive oil" ≠ "vegetable oil", "chicken breast" ≠ "chicken thighs")
+- Temperature/state modifiers that matter (e.g., "cold water" ≠ "water" - these are often separate ingredients in a recipe)
+- Different forms (e.g., "butter" ≠ "melted butter" if both appear in the recipe)
+- Different seasonings (e.g., "salt" ≠ "kosher salt" if both could be used differently)
 
 Return a JSON array where each element corresponds to an ingredient to match.
 Each element should be either:
 - The EXACT name from the existing ingredients list (if a good match exists)
 - null (if no good match exists and a new ingredient should be created)
 
-Only match if you're confident it's the same core ingredient. Don't match different ingredients.
-For example, "chicken breast" should NOT match "chicken thighs" - these are different cuts.
+Be CONSERVATIVE - when in doubt, return null. It's better to create a new ingredient than to incorrectly merge two distinct ingredients.
 
 Return ONLY the JSON array, no other text. Example: ["existing ingredient 1", null, "existing ingredient 3"]`;
 
       try {
-        const matchResult = await model.generateContent(matchPrompt);
+        const matchResult = await matchModel.generateContent(matchPrompt);
         const matchResponse = await matchResult.response;
         let matchJsonStr = matchResponse.text().trim();
 
