@@ -104,7 +104,7 @@ export async function PUT(request: NextRequest) {
     });
   }
 
-  // If calendar is changing and confirmed, delete existing events
+  // If calendar is changing and confirmed, delete existing events and clear meal calendar links
   if (calendarChanged && confirm_calendar_change) {
     console.log(`[settings] Calendar changing for household ${user.household_id}, deleting existing events`);
 
@@ -124,6 +124,28 @@ export async function PUT(request: NextRequest) {
       console.error("[settings] Failed to delete events:", deleteError);
     } else {
       console.log(`[settings] Deleted ${eventCount || 0} events`);
+    }
+
+    // Clear calendar_event_id from all meals in this household's weekly plans
+    // First get all weekly plan IDs for this household
+    const { data: weeklyPlans } = await supabase
+      .from("weekly_plan")
+      .select("id")
+      .eq("household_id", user.household_id);
+
+    if (weeklyPlans && weeklyPlans.length > 0) {
+      const planIds = weeklyPlans.map((p) => p.id);
+      const { error: mealUpdateError } = await supabase
+        .from("meals")
+        .update({ calendar_event_id: null })
+        .in("weekly_plan_id", planIds)
+        .not("calendar_event_id", "is", null);
+
+      if (mealUpdateError) {
+        console.error("[settings] Failed to clear meal calendar_event_ids:", mealUpdateError);
+      } else {
+        console.log("[settings] Cleared calendar_event_id from meals");
+      }
     }
   }
 

@@ -31,12 +31,13 @@ interface CreateRecipeResponse {
     id: string;
     name: string;
   };
-  debug: {
+  debug?: {
     urlFetched: string;
-    contentLength: number;
-    contentPreview: string;
-    aiExtraction: ExtractedRecipe;
+    extractionMethod: string;
+    htmlLength: number;
+    extraction: ExtractedRecipe;
     ingredientsCreated: number;
+    ingredientsSkipped: number;
   };
   error?: string;
 }
@@ -98,34 +99,35 @@ export default function NewRecipePage() {
       }
 
       // Update all steps based on response
-      updateStep("Fetching web page", {
-        status: "success",
-        details: `Fetched ${data.debug.contentLength} characters`,
-        data: data.debug.contentPreview,
-      });
+      if (data.debug) {
+        updateStep("Fetching web page", {
+          status: "success",
+          details: `Fetched ${data.debug.htmlLength} characters`,
+        });
 
-      updateStep("Extracting recipe data with AI", {
-        status: "success",
-        details: `Extracted: ${data.debug.aiExtraction.name}`,
-        data: {
-          name: data.debug.aiExtraction.name,
-          description: data.debug.aiExtraction.description,
-          category: data.debug.aiExtraction.category,
-          cuisine: data.debug.aiExtraction.cuisine,
-          ingredientCount: data.debug.aiExtraction.ingredients.length,
-        },
-      });
+        updateStep("Extracting recipe data with AI", {
+          status: "success",
+          details: `Extracted: ${data.debug.extraction.name} (via ${data.debug.extractionMethod})`,
+          data: {
+            name: data.debug.extraction.name,
+            description: data.debug.extraction.description,
+            category: data.debug.extraction.category,
+            cuisine: data.debug.extraction.cuisine,
+            ingredientCount: data.debug.extraction.ingredients.length,
+          },
+        });
 
-      updateStep("Creating recipe in database", {
-        status: "success",
-        details: `Recipe ID: ${data.recipe?.id}`,
-      });
+        updateStep("Creating recipe in database", {
+          status: "success",
+          details: `Recipe ID: ${data.recipe?.id}`,
+        });
 
-      updateStep("Creating ingredients", {
-        status: "success",
-        details: `Created ${data.debug.ingredientsCreated} ingredients`,
-        data: data.debug.aiExtraction.ingredients,
-      });
+        updateStep("Creating ingredients", {
+          status: "success",
+          details: `Created ${data.debug.ingredientsCreated} ingredients${data.debug.ingredientsSkipped > 0 ? `, ${data.debug.ingredientsSkipped} already existed` : ""}`,
+          data: data.debug.extraction.ingredients,
+        });
+      }
 
       setResult(data);
     } catch (err) {

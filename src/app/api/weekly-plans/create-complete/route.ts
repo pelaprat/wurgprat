@@ -153,6 +153,12 @@ export async function POST(request: NextRequest) {
     const calendarId = household?.settings?.google_calendar_id;
     const timezone = household?.timezone || "America/New_York";
 
+    console.log("[create-complete] Calendar event creation check:", {
+      hasAccessToken: !!accessToken,
+      calendarId: calendarId || "(not configured)",
+      mealCount: createdMeals.length,
+    });
+
     if (accessToken && calendarId) {
       // Get user names for assigned users
       const assignedUserIds = Array.from(new Set(createdMeals
@@ -205,6 +211,12 @@ export async function POST(request: NextRequest) {
           : undefined;
 
         try {
+          console.log(`[create-complete] Creating calendar event for meal ${meal.id}:`, {
+            date: originalMeal.date,
+            mealType: meal.meal_type,
+            mealName,
+          });
+
           const eventId = await createMealCalendarEvent(accessToken, calendarId, {
             mealId: meal.id,
             date: originalMeal.date,
@@ -215,17 +227,24 @@ export async function POST(request: NextRequest) {
           });
 
           if (eventId) {
+            console.log(`[create-complete] Calendar event created: ${eventId}`);
             // Update the meal with the calendar event ID
             await supabase
               .from("meals")
               .update({ calendar_event_id: eventId })
               .eq("id", meal.id);
+          } else {
+            console.log(`[create-complete] No event ID returned for meal ${meal.id}`);
           }
         } catch (error) {
-          console.error(`Failed to create calendar event for meal ${meal.id}:`, error);
+          console.error(`[create-complete] Failed to create calendar event for meal ${meal.id}:`, error);
           // Don't fail the whole operation, calendar events are secondary
         }
       }
+    } else {
+      console.log("[create-complete] Skipping calendar events:", {
+        reason: !accessToken ? "no access token" : "no calendar configured",
+      });
     }
 
     // 3. Create grocery list

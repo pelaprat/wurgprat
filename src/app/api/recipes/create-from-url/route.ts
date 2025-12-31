@@ -434,17 +434,24 @@ export async function POST(request: NextRequest) {
     // Build exact match map
     const ingredientMap = new Map<string, string>();
     existingIngredients?.forEach((ing) => {
-      ingredientMap.set(ing.name.toLowerCase(), ing.id);
+      if (ing.name) {
+        ingredientMap.set(ing.name.toLowerCase(), ing.id);
+      }
     });
 
     // Use AI to fuzzy match extracted ingredients to existing ones
     const fuzzyMatchMap = new Map<string, string>();
     const extractedNames = extracted.ingredients.map((ing) => ing.name).filter(Boolean);
 
-    if (existingIngredients && existingIngredients.length > 0 && extractedNames.length > 0) {
-      const existingNames = existingIngredients.map((ing) => ing.name);
+    // Filter out ingredients with null/undefined names
+    const validExistingIngredients = existingIngredients?.filter((ing) => ing.name) || [];
 
-      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+    // Only do fuzzy matching if we have the API key
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+    if (geminiApiKey && validExistingIngredients.length > 0 && extractedNames.length > 0) {
+      const existingNames = validExistingIngredients.map((ing) => ing.name);
+
+      const genAI = new GoogleGenerativeAI(geminiApiKey);
       const matchModel = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
       const matchPrompt = `You are matching recipe ingredients to an existing ingredient database.
@@ -499,7 +506,7 @@ Return ONLY the JSON array, no other text. Example: ["existing ingredient 1", nu
           const matchedName = matches[i];
 
           if (matchedName) {
-            const matchedIngredient = existingIngredients.find(
+            const matchedIngredient = validExistingIngredients.find(
               (ing) => ing.name.toLowerCase() === matchedName.toLowerCase()
             );
             if (matchedIngredient) {
