@@ -153,3 +153,184 @@ export function PageSkeleton({ itemCount = 5 }: { itemCount?: number }) {
     </div>
   );
 }
+
+/**
+ * Skeleton for weekly plan detail page
+ */
+export function WeeklyPlanDetailSkeleton() {
+  return (
+    <div className="max-w-6xl mx-auto animate-fadeIn">
+      {/* Back link */}
+      <Skeleton className="h-4 w-32 mb-4" />
+
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <div>
+          <Skeleton className="h-8 w-48 mb-2" />
+          <Skeleton className="h-5 w-32" />
+        </div>
+        <div className="flex gap-2">
+          <Skeleton className="h-10 w-28 rounded-lg" />
+          <Skeleton className="h-10 w-10 rounded-lg" />
+        </div>
+      </div>
+
+      {/* Week grid - mobile (stacked days) */}
+      <div className="md:hidden space-y-4">
+        {Array.from({ length: 7 }).map((_, i) => (
+          <div key={i} className="bg-white rounded-xl shadow-sm p-4">
+            <Skeleton className="h-5 w-24 mb-3" />
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-3/4" />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Week grid - desktop */}
+      <div className="hidden md:grid md:grid-cols-7 gap-2">
+        {Array.from({ length: 7 }).map((_, i) => (
+          <div key={i} className="bg-white rounded-xl shadow-sm p-3 min-h-[200px]">
+            <Skeleton className="h-4 w-16 mb-3" />
+            <div className="space-y-2">
+              <Skeleton className="h-16 w-full rounded-lg" />
+              <Skeleton className="h-16 w-full rounded-lg" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Skeleton for home page dashboard
+ */
+export function HomeSkeleton() {
+  return (
+    <div className="max-w-2xl mx-auto animate-fadeIn">
+      {/* Header with greeting */}
+      <div className="mb-8">
+        <div className="flex items-baseline justify-between">
+          <Skeleton className="h-8 w-40" />
+          <Skeleton className="h-5 w-32" />
+        </div>
+      </div>
+
+      {/* Tasks card skeleton */}
+      <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl p-6 mb-6 shadow-lg">
+        <Skeleton className="h-4 w-32 mb-3 opacity-50" />
+        <div className="space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-white/20 rounded-xl" />
+            <div>
+              <Skeleton className="h-5 w-48 mb-1 opacity-70" />
+              <Skeleton className="h-4 w-24 opacity-50" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Today's meals section */}
+      <div className="mb-6">
+        <Skeleton className="h-6 w-32 mb-4" />
+        <div className="bg-white rounded-xl shadow-sm p-4">
+          <div className="flex items-center gap-4">
+            <Skeleton className="h-12 w-12 rounded-xl" />
+            <div className="flex-1">
+              <Skeleton className="h-5 w-40 mb-2" />
+              <Skeleton className="h-4 w-24" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Quick links section */}
+      <div>
+        <Skeleton className="h-6 w-28 mb-4" />
+        <div className="grid grid-cols-2 gap-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="bg-white rounded-xl shadow-sm p-4">
+              <Skeleton className="h-5 w-24" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Skeleton for recipe detail page
+ */
+export function RecipeDetailSkeleton() {
+  return (
+    <div className="max-w-4xl mx-auto animate-fadeIn">
+      {/* Back link */}
+      <Skeleton className="h-4 w-24 mb-4" />
+
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
+        <div className="flex-1">
+          <Skeleton className="h-8 w-64 mb-2" />
+          <Skeleton className="h-4 w-full max-w-md mb-2" />
+          <Skeleton className="h-4 w-48" />
+        </div>
+        <div className="flex gap-2">
+          <Skeleton className="h-10 w-24 rounded-lg" />
+          <Skeleton className="h-10 w-10 rounded-lg" />
+        </div>
+      </div>
+
+      {/* Tags/badges row */}
+      <div className="flex flex-wrap gap-2 mb-6">
+        <Skeleton className="h-6 w-20 rounded-full" />
+        <Skeleton className="h-6 w-24 rounded-full" />
+        <Skeleton className="h-6 w-16 rounded-full" />
+      </div>
+
+      {/* Info cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="bg-white rounded-xl shadow-sm p-4">
+            <Skeleton className="h-4 w-16 mb-2" />
+            <Skeleton className="h-6 w-12" />
+          </div>
+        ))}
+      </div>
+
+      {/* Ingredients section */}
+      <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
+        <Skeleton className="h-6 w-32 mb-4" />
+        <div className="space-y-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3">
+              <Skeleton className="h-4 w-4 rounded" />
+              <Skeleton className="h-4 w-12" />
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-4 w-32" />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Ratings section */}
+      <div className="bg-white rounded-xl shadow-sm p-6">
+        <Skeleton className="h-6 w-24 mb-4" />
+        <div className="space-y-3">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3">
+              <Skeleton className="h-8 w-8 rounded-full" />
+              <div className="flex-1">
+                <Skeleton className="h-4 w-24 mb-1" />
+                <Skeleton className="h-3 w-32" />
+              </div>
+              <Skeleton className="h-4 w-16" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}

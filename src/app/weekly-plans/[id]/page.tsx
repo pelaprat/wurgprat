@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { DAY_NAMES } from "@/constants/calendar";
+import { WeeklyPlanDetailSkeleton } from "@/components/Skeleton";
 
 interface Recipe {
   id: string;
@@ -651,11 +652,7 @@ export default function WeeklyPlanDetailPage() {
   }
 
   if (isLoading) {
-    return (
-      <div className="flex justify-center items-center min-h-[40vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
-      </div>
-    );
+    return <WeeklyPlanDetailSkeleton />;
   }
 
   if (error || !weeklyPlan) {

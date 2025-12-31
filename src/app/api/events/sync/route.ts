@@ -154,7 +154,29 @@ export async function POST() {
     result.success = true;
   } catch (error) {
     console.error("Failed to sync calendar events:", error);
-    result.error = error instanceof Error ? error.message : "Failed to sync events";
+
+    // Parse Google API errors for better messages
+    let errorMessage = "Failed to sync events";
+
+    if (error instanceof Error) {
+      const message = error.message.toLowerCase();
+
+      if (message.includes("not found") || message.includes("404")) {
+        errorMessage = `Calendar not found. The calendar "${calendarId}" may have been deleted or you may no longer have access to it. Please select a different calendar in Settings.`;
+      } else if (message.includes("forbidden") || message.includes("403")) {
+        errorMessage = "Access denied. You don't have permission to read this calendar. Please select a calendar you own or have read access to.";
+      } else if (message.includes("unauthorized") || message.includes("401")) {
+        errorMessage = "Authentication expired. Please sign out and sign back in to refresh your Google access.";
+      } else if (message.includes("rate limit") || message.includes("429")) {
+        errorMessage = "Too many requests. Please wait a moment and try again.";
+      } else if (message.includes("invalid_grant")) {
+        errorMessage = "Google access has expired. Please sign out and sign back in to reconnect your Google account.";
+      } else {
+        errorMessage = `Google Calendar error: ${error.message}`;
+      }
+    }
+
+    result.error = errorMessage;
   }
 
   return NextResponse.json(result);

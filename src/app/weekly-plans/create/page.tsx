@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { PageHeaderSkeleton, CardSkeleton } from "@/components/Skeleton";
 
 export default function CreateWeeklyPlanPage() {
   const router = useRouter();
@@ -11,8 +12,12 @@ export default function CreateWeeklyPlanPage() {
   }, [router]);
 
   return (
-    <div className="flex justify-center items-center min-h-[40vh]">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
+    <div className="max-w-4xl mx-auto">
+      <PageHeaderSkeleton />
+      <div className="space-y-4">
+        <CardSkeleton />
+        <CardSkeleton />
+      </div>
     </div>
   );
 }

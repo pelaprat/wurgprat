@@ -56,8 +56,6 @@ export async function PUT(request: NextRequest) {
 
   const body = await request.json();
   const {
-    cooked_recipes_sheet_url,
-    wishlist_recipes_sheet_url,
     google_calendar_id,
     timezone,
     confirm_calendar_change,
@@ -132,8 +130,6 @@ export async function PUT(request: NextRequest) {
   // Merge new settings with existing
   const updatedSettings = {
     ...(household?.settings || {}),
-    cooked_recipes_sheet_url,
-    wishlist_recipes_sheet_url,
     google_calendar_id,
   };
 

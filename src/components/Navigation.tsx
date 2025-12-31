@@ -89,13 +89,13 @@ export default function Navigation() {
               <div className="h-8 w-20 bg-gray-200 animate-pulse rounded" />
             ) : session ? (
               <div className="flex items-center space-x-2">
-                {/* User Menu */}
-                <div className="relative" ref={userMenuRef}>
+                {/* User Menu - hidden on mobile since hamburger menu has these options */}
+                <div className="relative hidden lg:block" ref={userMenuRef}>
                   <button
                     onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
                     className="flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:text-emerald-600 hover:bg-gray-50 transition-colors"
                   >
-                    <span className="hidden sm:block">{session.user?.name}</span>
+                    <span>{session.user?.name}</span>
                     <svg
                       className={`w-4 h-4 transition-transform ${isUserMenuOpen ? "rotate-180" : ""}`}
                       fill="none"

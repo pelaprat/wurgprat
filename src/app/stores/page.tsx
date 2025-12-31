@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
+import { PageHeaderSkeleton, CardSkeleton } from "@/components/Skeleton";
 
 interface Store {
   id: string;
@@ -133,8 +134,13 @@ export default function StoresPage() {
 
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center min-h-[40vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
+      <div className="max-w-4xl mx-auto">
+        <PageHeaderSkeleton />
+        <div className="space-y-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <CardSkeleton key={i} />
+          ))}
+        </div>
       </div>
     );
   }

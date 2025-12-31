@@ -4,6 +4,7 @@ import { useSession, signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
+import { HomeSkeleton } from "@/components/Skeleton";
 
 interface Recipe {
   id: string;
@@ -108,11 +109,7 @@ function HomeContent() {
   }, [session?.user?.email]);
 
   if (status === "loading") {
-    return (
-      <div className="flex justify-center items-center min-h-[60vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
-      </div>
-    );
+    return <HomeSkeleton />;
   }
 
   if (!session) {
@@ -184,9 +181,7 @@ function HomeContent() {
       )}
 
       {isLoading ? (
-        <div className="flex justify-center items-center min-h-[40vh]">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600"></div>
-        </div>
+        <HomeSkeleton />
       ) : (
         <>
           {/* Header */}
@@ -405,11 +400,7 @@ function HomeContent() {
 
 export default function Home() {
   return (
-    <Suspense fallback={
-      <div className="flex justify-center items-center min-h-[60vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
-      </div>
-    }>
+    <Suspense fallback={<HomeSkeleton />}>
       <HomeContent />
     </Suspense>
   );

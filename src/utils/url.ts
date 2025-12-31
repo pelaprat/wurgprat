@@ -84,37 +84,6 @@ export function validateExternalUrl(url: string): { valid: boolean; error?: stri
 }
 
 /**
- * Validate that a URL is a valid Google Sheets URL
- */
-export function validateGoogleSheetsUrl(url: string): { valid: boolean; error?: string; spreadsheetId?: string } {
-  const validation = validateExternalUrl(url);
-  if (!validation.valid) {
-    return validation;
-  }
-
-  try {
-    const parsed = new URL(url);
-
-    // Must be from Google domains
-    const validHosts = ["docs.google.com", "sheets.google.com"];
-    if (!validHosts.includes(parsed.hostname)) {
-      return { valid: false, error: "URL must be a Google Sheets URL" };
-    }
-
-    // Extract spreadsheet ID from various URL formats
-    // Format 1: /spreadsheets/d/{spreadsheetId}/...
-    const match = parsed.pathname.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-    if (!match) {
-      return { valid: false, error: "Could not extract spreadsheet ID from URL" };
-    }
-
-    return { valid: true, spreadsheetId: match[1] };
-  } catch {
-    return { valid: false, error: "Invalid Google Sheets URL format" };
-  }
-}
-
-/**
  * Validate that a URL is a valid ICS calendar URL
  */
 export function validateIcsUrl(url: string): { valid: boolean; error?: string } {

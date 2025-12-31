@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { RecipeDetailSkeleton } from "@/components/Skeleton";
 
 interface Ingredient {
   id: string;
@@ -444,11 +445,7 @@ export default function RecipeDetailPage() {
   }
 
   if (isLoading) {
-    return (
-      <div className="flex justify-center items-center min-h-[40vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
-      </div>
-    );
+    return <RecipeDetailSkeleton />;
   }
 
   if (error || !recipe) {

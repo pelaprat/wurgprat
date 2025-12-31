@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
+import { PageHeaderSkeleton, IngredientCardSkeleton } from "@/components/Skeleton";
 
 interface Store {
   id: string;
@@ -383,8 +384,20 @@ export default function IngredientsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center min-h-[40vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
+      <div className="max-w-4xl mx-auto">
+        <PageHeaderSkeleton />
+        {/* Search and filters skeleton */}
+        <div className="mb-6 flex flex-col sm:flex-row gap-4">
+          <div className="skeleton h-10 flex-1 rounded-lg" />
+          <div className="skeleton h-10 w-36 rounded-lg" />
+          <div className="skeleton h-10 w-36 rounded-lg" />
+        </div>
+        {/* Ingredient list skeleton */}
+        <div className="space-y-3">
+          {Array.from({ length: 10 }).map((_, i) => (
+            <IngredientCardSkeleton key={i} />
+          ))}
+        </div>
       </div>
     );
   }
