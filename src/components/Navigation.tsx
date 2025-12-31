@@ -13,6 +13,7 @@ const navLinks = [
   { href: "/ingredients", label: "Ingredients" },
   { href: "/departments", label: "Departments" },
   { href: "/stores", label: "Stores" },
+  { href: "/kids", label: "Kids" },
 ];
 
 export default function Navigation() {

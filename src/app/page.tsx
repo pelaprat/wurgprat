@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 import { HomeSkeleton } from "@/components/Skeleton";
+import type { Kid } from "@/types";
 
 interface Recipe {
   id: string;
@@ -40,6 +41,20 @@ interface Responsibility {
   events: { id: string; title: string; start_time: string; all_day: boolean }[];
 }
 
+interface QuickAdjustModal {
+  kidId: string;
+  kidName: string;
+  type: "allowance" | "prat_points";
+  currentValue: number;
+}
+
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(amount);
+}
+
 interface TodayData {
   user: {
     id: string;
@@ -65,6 +80,10 @@ function HomeContent() {
   const [notification, setNotification] = useState<string | null>(null);
   const [todayData, setTodayData] = useState<TodayData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [kids, setKids] = useState<Kid[]>([]);
+  const [quickAdjust, setQuickAdjust] = useState<QuickAdjustModal | null>(null);
+  const [customAmount, setCustomAmount] = useState("");
+  const [isAdjusting, setIsAdjusting] = useState(false);
 
   const [today] = useState(() => new Date());
 
@@ -107,6 +126,76 @@ function HomeContent() {
 
     fetchTodayData();
   }, [session?.user?.email]);
+
+  // Fetch kids
+  useEffect(() => {
+    if (!session) return;
+
+    const fetchKids = async () => {
+      try {
+        const response = await fetch("/api/kids");
+        if (response.ok) {
+          const data = await response.json();
+          setKids(data.kids || []);
+        }
+      } catch (error) {
+        console.error("Failed to fetch kids:", error);
+      }
+    };
+
+    fetchKids();
+  }, [session?.user?.email]);
+
+  const openQuickAdjust = (kid: Kid, type: "allowance" | "prat_points") => {
+    setQuickAdjust({
+      kidId: kid.id,
+      kidName: kid.first_name,
+      type,
+      currentValue: type === "allowance" ? kid.allowance_balance : kid.prat_points,
+    });
+    setCustomAmount("");
+  };
+
+  const handleQuickAdjust = async (amount: number) => {
+    if (!quickAdjust) return;
+
+    setIsAdjusting(true);
+    const newValue = quickAdjust.currentValue + amount;
+
+    try {
+      const response = await fetch(`/api/kids/${quickAdjust.kidId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          [quickAdjust.type === "allowance" ? "allowance_balance" : "prat_points"]:
+            Math.max(0, newValue),
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setKids((prev) =>
+          prev.map((k) => (k.id === quickAdjust.kidId ? data.kid : k))
+        );
+        setQuickAdjust({
+          ...quickAdjust,
+          currentValue: Math.max(0, newValue),
+        });
+      }
+    } catch (error) {
+      console.error("Failed to adjust:", error);
+    } finally {
+      setIsAdjusting(false);
+    }
+  };
+
+  const handleCustomAdjust = () => {
+    const amount = parseFloat(customAmount);
+    if (!isNaN(amount)) {
+      handleQuickAdjust(amount);
+      setCustomAmount("");
+    }
+  };
 
   if (status === "loading") {
     return <HomeSkeleton />;
@@ -163,6 +252,125 @@ function HomeContent() {
 
   return (
     <div className="max-w-3xl mx-auto">
+      {/* Quick Adjust Modal */}
+      {quickAdjust && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50">
+          <div className="bg-white w-full sm:w-96 sm:rounded-xl rounded-t-xl shadow-xl p-6 animate-slideUp sm:animate-scaleIn">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {quickAdjust.kidName}&apos;s {quickAdjust.type === "allowance" ? "Allowance" : "Prat Points"}
+              </h3>
+              <button
+                onClick={() => setQuickAdjust(null)}
+                className="p-2 -mr-2 text-gray-400 hover:text-gray-600 rounded-lg"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="text-center mb-6">
+              <p className="text-sm text-gray-500 mb-1">Current Balance</p>
+              <p className={`text-3xl font-bold ${quickAdjust.type === "allowance" ? "text-gray-900" : "text-emerald-600"}`}>
+                {quickAdjust.type === "allowance"
+                  ? formatCurrency(quickAdjust.currentValue)
+                  : quickAdjust.currentValue}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-4 gap-2 mb-4">
+              {quickAdjust.type === "allowance" ? (
+                <>
+                  <button
+                    onClick={() => handleQuickAdjust(-5)}
+                    disabled={isAdjusting}
+                    className="py-3 px-2 bg-red-100 text-red-700 rounded-lg font-medium hover:bg-red-200 active:scale-95 transition-all disabled:opacity-50"
+                  >
+                    -$5
+                  </button>
+                  <button
+                    onClick={() => handleQuickAdjust(-1)}
+                    disabled={isAdjusting}
+                    className="py-3 px-2 bg-red-100 text-red-700 rounded-lg font-medium hover:bg-red-200 active:scale-95 transition-all disabled:opacity-50"
+                  >
+                    -$1
+                  </button>
+                  <button
+                    onClick={() => handleQuickAdjust(1)}
+                    disabled={isAdjusting}
+                    className="py-3 px-2 bg-emerald-100 text-emerald-700 rounded-lg font-medium hover:bg-emerald-200 active:scale-95 transition-all disabled:opacity-50"
+                  >
+                    +$1
+                  </button>
+                  <button
+                    onClick={() => handleQuickAdjust(5)}
+                    disabled={isAdjusting}
+                    className="py-3 px-2 bg-emerald-100 text-emerald-700 rounded-lg font-medium hover:bg-emerald-200 active:scale-95 transition-all disabled:opacity-50"
+                  >
+                    +$5
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => handleQuickAdjust(-5)}
+                    disabled={isAdjusting}
+                    className="py-3 px-2 bg-red-100 text-red-700 rounded-lg font-medium hover:bg-red-200 active:scale-95 transition-all disabled:opacity-50"
+                  >
+                    -5
+                  </button>
+                  <button
+                    onClick={() => handleQuickAdjust(-1)}
+                    disabled={isAdjusting}
+                    className="py-3 px-2 bg-red-100 text-red-700 rounded-lg font-medium hover:bg-red-200 active:scale-95 transition-all disabled:opacity-50"
+                  >
+                    -1
+                  </button>
+                  <button
+                    onClick={() => handleQuickAdjust(1)}
+                    disabled={isAdjusting}
+                    className="py-3 px-2 bg-emerald-100 text-emerald-700 rounded-lg font-medium hover:bg-emerald-200 active:scale-95 transition-all disabled:opacity-50"
+                  >
+                    +1
+                  </button>
+                  <button
+                    onClick={() => handleQuickAdjust(5)}
+                    disabled={isAdjusting}
+                    className="py-3 px-2 bg-emerald-100 text-emerald-700 rounded-lg font-medium hover:bg-emerald-200 active:scale-95 transition-all disabled:opacity-50"
+                  >
+                    +5
+                  </button>
+                </>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <input
+                type="number"
+                value={customAmount}
+                onChange={(e) => setCustomAmount(e.target.value)}
+                placeholder={quickAdjust.type === "allowance" ? "Custom amount..." : "Custom points..."}
+                step={quickAdjust.type === "allowance" ? "0.01" : "1"}
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                onKeyDown={(e) => e.key === "Enter" && handleCustomAdjust()}
+              />
+              <button
+                onClick={handleCustomAdjust}
+                disabled={isAdjusting || !customAmount}
+                className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 active:scale-95 transition-all disabled:opacity-50"
+              >
+                Add
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-500 text-center mt-3">
+              Use negative numbers to subtract
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Notification toast */}
       {notification && (
         <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 animate-slideDown">
@@ -357,6 +565,48 @@ function HomeContent() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
               </Link>
+            )}
+
+            {/* Kids Quick Adjust */}
+            {kids.length > 0 && (
+              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                  <h2 className="font-semibold text-gray-900">Kids</h2>
+                  <Link
+                    href="/kids"
+                    className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
+                  >
+                    Manage
+                  </Link>
+                </div>
+                <div className="divide-y divide-gray-100">
+                  {kids.map((kid) => (
+                    <div key={kid.id} className="px-5 py-3 flex items-center justify-between">
+                      <span className="font-medium text-gray-900">{kid.first_name}</span>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => openQuickAdjust(kid, "allowance")}
+                          className="text-sm px-2.5 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 active:scale-95 transition-all"
+                        >
+                          <span className="text-gray-500">$</span>{" "}
+                          <span className="font-medium text-gray-900">
+                            {kid.allowance_balance.toFixed(2)}
+                          </span>
+                        </button>
+                        <button
+                          onClick={() => openQuickAdjust(kid, "prat_points")}
+                          className="text-sm px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 active:scale-95 transition-all"
+                        >
+                          <span className="font-medium text-emerald-600">
+                            {kid.prat_points}
+                          </span>
+                          <span className="text-emerald-500 ml-1">pts</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
 

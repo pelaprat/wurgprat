@@ -8,9 +8,9 @@ All data is stored in Supabase (PostgreSQL). Data is scoped to households — us
 
 ```
 ┌──────────┐       ┌──────────────┐
-│  users   │──────▶│  households  │
-└──────────┘   N:1 └──────────────┘
-                          │
+│  users   │──────▶│  households  │◀──────┌──────────┐
+└──────────┘   N:1 └──────────────┘   N:1 │   kids   │
+                          │               └──────────┘
     ┌─────────────────────┼─────────────────────┬──────────────┬──────────┐
     │                     │                     │              │          │
     ▼                     ▼                     ▼              ▼          ▼
@@ -64,6 +64,22 @@ Individual users linked to Google accounts.
 | picture | text | Avatar URL |
 | household_id | uuid | FK → households.id |
 | created_at | timestamptz | Creation timestamp |
+
+### kids
+Children belonging to a household.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| household_id | uuid | FK → households.id |
+| first_name | text | Child's first name |
+| last_name | text | Child's last name |
+| email | text | Child's email address |
+| birth_date | date | Birth date (age derived from this) |
+| allowance_balance | numeric(10,2) | Current allowance balance in dollars |
+| prat_points | integer | Prat points balance |
+| created_at | timestamptz | Creation timestamp |
+| updated_at | timestamptz | Last updated timestamp |
 
 ### stores
 Stores where the household shops.
@@ -325,6 +341,7 @@ CREATE INDEX idx_grocery_items_grocery_list ON grocery_items(grocery_list_id);
 CREATE INDEX idx_grocery_items_ingredient ON grocery_items(ingredient_id);
 CREATE INDEX idx_events_household ON events(household_id);
 CREATE INDEX idx_events_start_time ON events(household_id, start_time);
+CREATE INDEX idx_kids_household ON kids(household_id);
 ```
 
 ---

@@ -51,3 +51,16 @@ export interface Household {
   name: string;
   created_at: string;
 }
+
+export interface Kid {
+  id: string;
+  household_id: string;
+  first_name: string;
+  last_name?: string;
+  email?: string;
+  birth_date?: string;
+  allowance_balance: number;
+  prat_points: number;
+  created_at: string;
+  updated_at: string;
+}
