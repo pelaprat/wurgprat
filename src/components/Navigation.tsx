@@ -5,15 +5,14 @@ import { usePathname } from "next/navigation";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { useState, useRef, useEffect } from "react";
 import { useHousehold } from "@/contexts/HouseholdContext";
+import type { Kid } from "@/types";
 
-const navLinks = [
+const weeklyPlanningLinks = [
   { href: "/weekly-plans", label: "Weekly Plans" },
   { href: "/recipes", label: "Recipes" },
-  { href: "/events", label: "Events" },
   { href: "/ingredients", label: "Ingredients" },
-  { href: "/departments", label: "Departments" },
   { href: "/stores", label: "Stores" },
-  { href: "/kids", label: "Kids" },
+  { href: "/departments", label: "Departments" },
 ];
 
 export default function Navigation() {
@@ -22,18 +21,59 @@ export default function Navigation() {
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isPlanningMenuOpen, setIsPlanningMenuOpen] = useState(false);
+  const [isKidsMenuOpen, setIsKidsMenuOpen] = useState(false);
+  const [kids, setKids] = useState<Kid[]>([]);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const planningMenuRef = useRef<HTMLDivElement>(null);
+  const kidsMenuRef = useRef<HTMLDivElement>(null);
+
+  // Mobile menu expanded sections
+  const [mobileExpandedSection, setMobileExpandedSection] = useState<string | null>(null);
 
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
     return pathname.startsWith(href);
   };
 
-  // Close user menu when clicking outside
+  const isPlanningActive = () => {
+    return weeklyPlanningLinks.some(link => pathname.startsWith(link.href));
+  };
+
+  const isKidsActive = () => {
+    return pathname.startsWith("/kids");
+  };
+
+  // Fetch kids
+  useEffect(() => {
+    if (!session) return;
+
+    const fetchKids = async () => {
+      try {
+        const response = await fetch("/api/kids");
+        if (response.ok) {
+          const data = await response.json();
+          setKids(data.kids || []);
+        }
+      } catch (error) {
+        console.error("Failed to fetch kids:", error);
+      }
+    };
+
+    fetchKids();
+  }, [session?.user?.email]);
+
+  // Close menus when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
         setIsUserMenuOpen(false);
+      }
+      if (planningMenuRef.current && !planningMenuRef.current.contains(event.target as Node)) {
+        setIsPlanningMenuOpen(false);
+      }
+      if (kidsMenuRef.current && !kidsMenuRef.current.contains(event.target as Node)) {
+        setIsKidsMenuOpen(false);
       }
     };
 
@@ -56,31 +96,132 @@ export default function Navigation() {
   // Close mobile menu on route change
   useEffect(() => {
     setIsMobileMenuOpen(false);
+    setIsPlanningMenuOpen(false);
+    setIsKidsMenuOpen(false);
   }, [pathname]);
+
+  const DropdownChevron = ({ isOpen }: { isOpen: boolean }) => (
+    <svg
+      className={`w-4 h-4 transition-transform ${isOpen ? "rotate-180" : ""}`}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+    </svg>
+  );
 
   return (
     <nav className="bg-white shadow-sm border-b">
       <div className="container mx-auto px-4">
         <div className="flex justify-between items-center h-16">
-          <div className="flex items-center space-x-8">
+          <div className="flex items-center space-x-6">
             <Link href="/" className="text-xl font-bold text-emerald-600">
               {householdName || "Home"}
             </Link>
             {session && (
-              <div className="hidden lg:flex space-x-1">
-                {navLinks.map((link) => (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                      isActive(link.href)
+              <div className="hidden lg:flex items-center space-x-1">
+                {/* Weekly Planning Dropdown */}
+                <div className="relative" ref={planningMenuRef}>
+                  <button
+                    onClick={() => {
+                      setIsPlanningMenuOpen(!isPlanningMenuOpen);
+                      setIsKidsMenuOpen(false);
+                    }}
+                    className={`flex items-center space-x-1 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                      isPlanningActive()
                         ? "bg-emerald-50 text-emerald-700"
                         : "text-gray-600 hover:text-emerald-600 hover:bg-gray-50"
                     }`}
                   >
-                    {link.label}
-                  </Link>
-                ))}
+                    <span>Weekly Planning</span>
+                    <DropdownChevron isOpen={isPlanningMenuOpen} />
+                  </button>
+
+                  {isPlanningMenuOpen && (
+                    <div className="absolute left-0 mt-2 w-48 bg-white rounded-lg shadow-lg border py-1 z-50">
+                      {weeklyPlanningLinks.map((link) => (
+                        <Link
+                          key={link.href}
+                          href={link.href}
+                          onClick={() => setIsPlanningMenuOpen(false)}
+                          className={`block px-4 py-2 text-sm ${
+                            isActive(link.href)
+                              ? "bg-emerald-50 text-emerald-700"
+                              : "text-gray-700 hover:bg-gray-100"
+                          }`}
+                        >
+                          {link.label}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Events - standalone */}
+                <Link
+                  href="/events"
+                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                    isActive("/events")
+                      ? "bg-emerald-50 text-emerald-700"
+                      : "text-gray-600 hover:text-emerald-600 hover:bg-gray-50"
+                  }`}
+                >
+                  Events
+                </Link>
+
+                {/* Kids Dropdown */}
+                <div className="relative" ref={kidsMenuRef}>
+                  <button
+                    onClick={() => {
+                      setIsKidsMenuOpen(!isKidsMenuOpen);
+                      setIsPlanningMenuOpen(false);
+                    }}
+                    className={`flex items-center space-x-1 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                      isKidsActive()
+                        ? "bg-emerald-50 text-emerald-700"
+                        : "text-gray-600 hover:text-emerald-600 hover:bg-gray-50"
+                    }`}
+                  >
+                    <span>Kids</span>
+                    <DropdownChevron isOpen={isKidsMenuOpen} />
+                  </button>
+
+                  {isKidsMenuOpen && (
+                    <div className="absolute left-0 mt-2 w-48 bg-white rounded-lg shadow-lg border py-1 z-50">
+                      {kids.length > 0 ? (
+                        <>
+                          {kids.map((kid) => (
+                            <Link
+                              key={kid.id}
+                              href={`/kids/${kid.id}`}
+                              onClick={() => setIsKidsMenuOpen(false)}
+                              className={`block px-4 py-2 text-sm ${
+                                pathname === `/kids/${kid.id}`
+                                  ? "bg-emerald-50 text-emerald-700"
+                                  : "text-gray-700 hover:bg-gray-100"
+                              }`}
+                            >
+                              {kid.first_name}
+                            </Link>
+                          ))}
+                          <div className="border-t my-1" />
+                        </>
+                      ) : null}
+                      <Link
+                        href="/kids"
+                        onClick={() => setIsKidsMenuOpen(false)}
+                        className={`block px-4 py-2 text-sm ${
+                          pathname === "/kids"
+                            ? "bg-emerald-50 text-emerald-700"
+                            : "text-gray-700 hover:bg-gray-100"
+                        }`}
+                      >
+                        {kids.length > 0 ? "Manage Kids" : "Add Kids"}
+                      </Link>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -97,19 +238,7 @@ export default function Navigation() {
                     className="flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:text-emerald-600 hover:bg-gray-50 transition-colors"
                   >
                     <span>{session.user?.name}</span>
-                    <svg
-                      className={`w-4 h-4 transition-transform ${isUserMenuOpen ? "rotate-180" : ""}`}
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M19 9l-7 7-7-7"
-                      />
-                    </svg>
+                    <DropdownChevron isOpen={isUserMenuOpen} />
                   </button>
 
                   {/* Dropdown Menu */}
@@ -217,28 +346,125 @@ export default function Navigation() {
             <div className="flex flex-col h-[calc(100%-4rem)] overflow-y-auto">
               {/* Navigation links */}
               <nav className="flex-1 px-3 py-4 space-y-1">
-                {navLinks.map((link) => (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    className={`flex items-center px-4 py-3.5 rounded-xl text-base font-medium transition-colors touch-feedback ${
-                      isActive(link.href)
+                {/* Weekly Planning Section */}
+                <div>
+                  <button
+                    onClick={() => setMobileExpandedSection(
+                      mobileExpandedSection === "planning" ? null : "planning"
+                    )}
+                    className={`flex items-center justify-between w-full px-4 py-3.5 rounded-xl text-base font-medium transition-colors touch-feedback ${
+                      isPlanningActive()
                         ? "bg-emerald-50 text-emerald-700"
                         : "text-gray-700 hover:bg-gray-50 active:bg-gray-100"
                     }`}
                   >
-                    {link.label}
+                    <span>Weekly Planning</span>
                     <svg
-                      className="w-5 h-5 ml-auto text-gray-400"
+                      className={`w-5 h-5 text-gray-400 transition-transform ${
+                        mobileExpandedSection === "planning" ? "rotate-180" : ""
+                      }`}
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
                     >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
-                  </Link>
-                ))}
+                  </button>
+                  {mobileExpandedSection === "planning" && (
+                    <div className="mt-1 ml-4 space-y-1">
+                      {weeklyPlanningLinks.map((link) => (
+                        <Link
+                          key={link.href}
+                          href={link.href}
+                          onClick={() => setIsMobileMenuOpen(false)}
+                          className={`flex items-center px-4 py-3 rounded-xl text-base transition-colors ${
+                            isActive(link.href)
+                              ? "bg-emerald-50 text-emerald-700"
+                              : "text-gray-600 hover:bg-gray-50 active:bg-gray-100"
+                          }`}
+                        >
+                          {link.label}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Events - standalone */}
+                <Link
+                  href="/events"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={`flex items-center px-4 py-3.5 rounded-xl text-base font-medium transition-colors touch-feedback ${
+                    isActive("/events")
+                      ? "bg-emerald-50 text-emerald-700"
+                      : "text-gray-700 hover:bg-gray-50 active:bg-gray-100"
+                  }`}
+                >
+                  Events
+                  <svg
+                    className="w-5 h-5 ml-auto text-gray-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </Link>
+
+                {/* Kids Section */}
+                <div>
+                  <button
+                    onClick={() => setMobileExpandedSection(
+                      mobileExpandedSection === "kids" ? null : "kids"
+                    )}
+                    className={`flex items-center justify-between w-full px-4 py-3.5 rounded-xl text-base font-medium transition-colors touch-feedback ${
+                      isKidsActive()
+                        ? "bg-emerald-50 text-emerald-700"
+                        : "text-gray-700 hover:bg-gray-50 active:bg-gray-100"
+                    }`}
+                  >
+                    <span>Kids</span>
+                    <svg
+                      className={`w-5 h-5 text-gray-400 transition-transform ${
+                        mobileExpandedSection === "kids" ? "rotate-180" : ""
+                      }`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {mobileExpandedSection === "kids" && (
+                    <div className="mt-1 ml-4 space-y-1">
+                      {kids.map((kid) => (
+                        <Link
+                          key={kid.id}
+                          href={`/kids/${kid.id}`}
+                          onClick={() => setIsMobileMenuOpen(false)}
+                          className={`flex items-center px-4 py-3 rounded-xl text-base transition-colors ${
+                            pathname === `/kids/${kid.id}`
+                              ? "bg-emerald-50 text-emerald-700"
+                              : "text-gray-600 hover:bg-gray-50 active:bg-gray-100"
+                          }`}
+                        >
+                          {kid.first_name}
+                        </Link>
+                      ))}
+                      <Link
+                        href="/kids"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className={`flex items-center px-4 py-3 rounded-xl text-base transition-colors ${
+                          pathname === "/kids"
+                            ? "bg-emerald-50 text-emerald-700"
+                            : "text-gray-600 hover:bg-gray-50 active:bg-gray-100"
+                        }`}
+                      >
+                        {kids.length > 0 ? "Manage Kids" : "Add Kids"}
+                      </Link>
+                    </div>
+                  )}
+                </div>
               </nav>
 
               {/* Footer actions */}
