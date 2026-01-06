@@ -52,7 +52,19 @@ export interface GroceryItemDraft {
   unit: string;
   recipeBreakdown: RecipeBreakdown[];
   isManualAdd: boolean;
+  isStaple: boolean;
   checked: boolean;
+}
+
+export interface StapleItemDraft {
+  id: string; // temporary id for UI
+  ingredientId: string;
+  ingredientName: string;
+  department: string;
+  storeId?: string;
+  storeName?: string;
+  quantity: string;
+  unit: string;
 }
 
 export interface MealPlanWizardState {
@@ -67,6 +79,9 @@ export interface MealPlanWizardState {
 
   // Phase 2.5 data (event assignments)
   eventAssignments: EventAssignment[];
+
+  // Phase 2.75 data (staples)
+  stapleItems: StapleItemDraft[];
 
   // Phase 3 data
   groceryItems: GroceryItemDraft[];
@@ -105,6 +120,12 @@ interface MealPlanWizardContextType extends MealPlanWizardState {
   updateEventAssignment: (eventId: string, userIds: string[]) => void;
   toggleEventUserAssignment: (eventId: string, userId: string) => void;
 
+  // Phase 2.75 actions (staples)
+  setStapleItems: (items: StapleItemDraft[]) => void;
+  addStapleItem: (item: Omit<StapleItemDraft, "id">) => void;
+  updateStapleItem: (id: string, updates: Partial<StapleItemDraft>) => void;
+  removeStapleItem: (id: string) => void;
+
   // Phase 3 actions
   setGroceryItems: (items: GroceryItemDraft[]) => void;
   updateGroceryItem: (id: string, updates: Partial<GroceryItemDraft>) => void;
@@ -140,6 +161,7 @@ const initialState: MealPlanWizardState = {
   proposedMeals: [],
   weekEvents: [],
   eventAssignments: [],
+  stapleItems: [],
   groceryItems: [],
   aiExplanation: undefined,
   isGenerating: false,
@@ -186,6 +208,7 @@ export function MealPlanWizardProvider({ children }: { children: ReactNode }) {
           userDescription: state.userDescription,
           selectedRecipeIds: state.selectedRecipeIds,
           proposedMeals: state.proposedMeals,
+          stapleItems: state.stapleItems,
           groceryItems: state.groceryItems,
           eventAssignments: state.eventAssignments,
           aiExplanation: state.aiExplanation,
@@ -202,6 +225,7 @@ export function MealPlanWizardProvider({ children }: { children: ReactNode }) {
     state.userDescription,
     state.selectedRecipeIds,
     state.proposedMeals,
+    state.stapleItems,
     state.groceryItems,
     state.eventAssignments,
     state.aiExplanation
@@ -219,6 +243,7 @@ export function MealPlanWizardProvider({ children }: { children: ReactNode }) {
           userDescription: parsed.userDescription || "",
           selectedRecipeIds: parsed.selectedRecipeIds || [],
           proposedMeals: parsed.proposedMeals || [],
+          stapleItems: parsed.stapleItems || [],
           groceryItems: parsed.groceryItems || [],
           eventAssignments: parsed.eventAssignments || [],
           aiExplanation: parsed.aiExplanation,
@@ -438,6 +463,43 @@ export function MealPlanWizardProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // Phase 2.75 actions (staples)
+  const setStapleItems = useCallback((items: StapleItemDraft[]) => {
+    setState((prev) => ({ ...prev, stapleItems: items }));
+  }, []);
+
+  const addStapleItem = useCallback(
+    (item: Omit<StapleItemDraft, "id">) => {
+      setState((prev) => ({
+        ...prev,
+        stapleItems: [
+          ...prev.stapleItems,
+          { ...item, id: `staple-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` },
+        ],
+      }));
+    },
+    []
+  );
+
+  const updateStapleItem = useCallback(
+    (id: string, updates: Partial<StapleItemDraft>) => {
+      setState((prev) => ({
+        ...prev,
+        stapleItems: prev.stapleItems.map((item) =>
+          item.id === id ? { ...item, ...updates } : item
+        ),
+      }));
+    },
+    []
+  );
+
+  const removeStapleItem = useCallback((id: string) => {
+    setState((prev) => ({
+      ...prev,
+      stapleItems: prev.stapleItems.filter((item) => item.id !== id),
+    }));
+  }, []);
+
   // Phase 3 actions
   const setGroceryItems = useCallback((items: GroceryItemDraft[]) => {
     setState((prev) => ({ ...prev, groceryItems: items }));
@@ -533,6 +595,10 @@ export function MealPlanWizardProvider({ children }: { children: ReactNode }) {
         setEventAssignments,
         updateEventAssignment,
         toggleEventUserAssignment,
+        setStapleItems,
+        addStapleItem,
+        updateStapleItem,
+        removeStapleItem,
         setGroceryItems,
         updateGroceryItem,
         removeGroceryItem,

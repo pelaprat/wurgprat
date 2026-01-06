@@ -10,6 +10,17 @@ interface ProposedMeal {
   recipeName: string;
 }
 
+interface StapleItemInput {
+  id: string;
+  ingredientId: string;
+  ingredientName: string;
+  department: string;
+  storeId?: string;
+  storeName?: string;
+  quantity: string;
+  unit: string;
+}
+
 interface RecipeIngredient {
   ingredient_id: string;
   quantity: number | null;
@@ -19,6 +30,8 @@ interface RecipeIngredient {
     id: string;
     name: string;
     department: string | null;
+    store_id: string | null;
+    store: { id: string; name: string } | null;
   };
 }
 
@@ -34,10 +47,13 @@ interface GroceryItemDraft {
   ingredientId: string;
   ingredientName: string;
   department: string;
+  storeId?: string;
+  storeName?: string;
   totalQuantity: string;
   unit: string;
   recipeBreakdown: RecipeBreakdown[];
   isManualAdd: boolean;
+  isStaple: boolean;
   checked: boolean;
 }
 
@@ -103,7 +119,10 @@ export async function POST(request: NextRequest) {
 
   // Parse request
   const body = await request.json();
-  const { meals } = body as { meals: ProposedMeal[] };
+  const { meals, stapleItems } = body as {
+    meals: ProposedMeal[];
+    stapleItems?: StapleItemInput[];
+  };
 
   if (!meals || meals.length === 0) {
     return NextResponse.json({ error: "No meals provided" }, { status: 400 });
@@ -138,7 +157,12 @@ export async function POST(request: NextRequest) {
       ingredients (
         id,
         name,
-        department
+        department,
+        store_id,
+        store:stores (
+          id,
+          name
+        )
       )
     `)
     .in("recipe_id", uniqueRecipeIds);
@@ -158,6 +182,8 @@ export async function POST(request: NextRequest) {
       ingredientId: string;
       ingredientName: string;
       department: string;
+      storeId?: string;
+      storeName?: string;
       items: {
         recipeId: string;
         recipeName: string;
@@ -173,6 +199,8 @@ export async function POST(request: NextRequest) {
       id: string;
       name: string;
       department: string | null;
+      store_id: string | null;
+      store: { id: string; name: string } | null;
     };
     if (!ingredient) return;
 
@@ -184,6 +212,8 @@ export async function POST(request: NextRequest) {
         ingredientId,
         ingredientName: ingredient.name,
         department: ingredient.department || "Other",
+        storeId: ingredient.store_id || undefined,
+        storeName: ingredient.store?.name || undefined,
         items: [],
       };
     }
@@ -227,14 +257,82 @@ export async function POST(request: NextRequest) {
         ingredientId: group.ingredientId,
         ingredientName: group.ingredientName,
         department: group.department,
+        storeId: group.storeId,
+        storeName: group.storeName,
         totalQuantity: aggregated.quantity,
         unit: aggregated.unit,
         recipeBreakdown,
         isManualAdd: false,
+        isStaple: false,
         checked: false,
       };
     }
   );
+
+  // Merge staple items with recipe-based items
+  if (stapleItems && stapleItems.length > 0) {
+    stapleItems.forEach((staple) => {
+      // Find if this ingredient already exists from recipes
+      const existingItem = groceryItems.find(
+        (item) => item.ingredientId === staple.ingredientId
+      );
+
+      if (existingItem) {
+        // Merge: combine quantities and mark as staple
+        existingItem.isStaple = true;
+
+        // Try to combine quantities if units match
+        const existingUnit = existingItem.unit.toLowerCase().trim();
+        const stapleUnit = staple.unit.toLowerCase().trim();
+
+        if (existingUnit === stapleUnit || (!existingUnit && !stapleUnit)) {
+          // Same unit or both empty - sum the quantities
+          const existingQty = parseFloat(existingItem.totalQuantity) || 0;
+          const stapleQty = parseFloat(staple.quantity) || 0;
+          const combined = existingQty + stapleQty;
+          existingItem.totalQuantity =
+            combined % 1 === 0
+              ? String(combined)
+              : parseFloat(combined.toFixed(2)).toString();
+        } else {
+          // Different units - append staple quantity
+          existingItem.totalQuantity = `${existingItem.totalQuantity}${existingItem.unit ? ` ${existingItem.unit}` : ""} + ${staple.quantity}${staple.unit ? ` ${staple.unit}` : ""}`;
+          existingItem.unit = "";
+        }
+
+        // Add staple to recipe breakdown for transparency
+        existingItem.recipeBreakdown.push({
+          recipeId: "staple",
+          recipeName: "Staple",
+          quantity: staple.quantity,
+          unit: staple.unit,
+        });
+      } else {
+        // Add as new staple item
+        groceryItems.push({
+          id: `staple-${staple.ingredientId}`,
+          ingredientId: staple.ingredientId,
+          ingredientName: staple.ingredientName,
+          department: staple.department,
+          storeId: staple.storeId,
+          storeName: staple.storeName,
+          totalQuantity: staple.quantity,
+          unit: staple.unit,
+          recipeBreakdown: [
+            {
+              recipeId: "staple",
+              recipeName: "Staple",
+              quantity: staple.quantity,
+              unit: staple.unit,
+            },
+          ],
+          isManualAdd: false,
+          isStaple: true,
+          checked: false,
+        });
+      }
+    });
+  }
 
   // Sort by department and name
   groceryItems.sort((a, b) => {

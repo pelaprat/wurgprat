@@ -57,6 +57,13 @@ A web app for families to plan weekly meals, manage recipes, and generate grocer
 - Multiple recipes per day are allowed
 - Quick actions: "Mark as Leftover", "Clear Day", "Copy from Last Week"
 
+**Meal Editing (Post-Creation)**
+- Move meals between days within an existing weekly plan
+- Desktop: Drag-and-drop meals to different days
+- Mobile: Day dropdown selector on each meal
+- Calendar events automatically updated when meals are moved
+- Changes sync to Google Calendar (date/time updated)
+
 **Leftover Tracking**
 - Explicit leftover flag per day
 - Links to source meal (e.g., Tuesday leftover → Monday's chicken)
@@ -67,6 +74,7 @@ A web app for families to plan weekly meals, manage recipes, and generate grocer
 - "Sync to Calendar" button
 - Creates events: "[🍽️] Recipe Name" at 6 PM (configurable)
 - Updates propagate to family devices
+- When a weekly plan is deleted, all associated calendar events are automatically removed from Google Calendar
 
 ---
 
@@ -140,15 +148,23 @@ A web app for families to plan weekly meals, manage recipes, and generate grocer
 - Combine same ingredients (unit conversion)
 - Exclude pantry staples (configurable)
 
-**Store Organization**
-- Default stores: Whole Foods, Trader Joe's, Costco, local grocery
-- Per-ingredient preferred store
-- Configurable in settings
+**Staple Items**
+- Recurring grocery items added weekly (milk, eggs, bread, etc.)
+- Tied to ingredients in the household's ingredient database
+- Pre-populated from previous week's staples when creating a new plan
+- Can add/remove/modify quantities during plan creation
+- Merge with recipe ingredients: if same ingredient exists, quantities combine
+- Displayed with "Staple" badge in grocery list for visual distinction
+- Stored with `is_staple` flag in database for retrieval in subsequent weeks
 
-**Department Grouping**
-- Produce, Meat & Seafood, Dairy, Pantry, Frozen, Bakery, Other
-- Items grouped by department within each store
-- Customizable order
+**Two-Level Grouping (Store → Department)**
+- Top level: grouped by store (Whole Foods, Trader Joe's, Costco, etc.)
+- Second level: grouped by department within each store
+- Department order: Produce, Meat & Seafood, Dairy, Bakery, Frozen, Pantry, Canned Goods, Condiments, Spices, Beverages, Snacks, Other
+- Items sorted alphabetically within each department
+- "No Store Assigned" group appears last
+- Per-ingredient preferred store (configurable in settings)
+- Sticky headers: store and department labels pin to top when scrolling for context
 
 **Recipe Attribution**
 - Each item shows source recipes
@@ -192,14 +208,19 @@ A web app for families to plan weekly meals, manage recipes, and generate grocer
 4. Redirect to dashboard
 5. Prompt to add first recipe or start planning
 
-### Weekly Planning
-1. Navigate to Meal Planning page
-2. See current week grid with calendar events
-3. Drag recipes from bank to days (or use AI assistant)
-4. Mark leftover days
-5. Click "Sync to Calendar"
-6. Navigate to Shopping List
-7. Review, check off items at store
+### Weekly Planning (5-Step Wizard)
+1. **Input**: Select week, describe preferences, select recipes
+2. **Review Meals**: See AI-suggested meal plan, swap/remove meals, pick recipes manually
+3. **Staples**: Add recurring grocery items (pre-loaded from previous week)
+4. **Events**: Review calendar events, assign household members
+5. **Groceries**: Review merged grocery list (recipes + staples), finalize plan
+
+**Post-Creation**
+- Redirect to home page with success notification ("Weekly plan created")
+- Notification auto-dismisses after 5 seconds (or user can dismiss manually)
+- View weekly plan with Grocery List, Dinner Plans, and Events tabs
+- Sync meals to Google Calendar
+- Check off items while shopping
 
 ### Adding a Recipe
 1. Navigate to Recipes

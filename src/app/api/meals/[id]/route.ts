@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getServiceSupabase } from "@/lib/supabase";
-import { updateMealCalendarEvent } from "@/lib/google";
+import { updateMealCalendarEvent, updateMealCalendarEventDateTime } from "@/lib/google";
 
 export async function PATCH(
   request: NextRequest,
@@ -50,34 +50,50 @@ export async function PATCH(
   }
 
   const body = await request.json();
-  const { assigned_user_id } = body;
+  const { assigned_user_id, day } = body;
+
+  // Validate day if provided
+  if (day !== undefined && (typeof day !== "number" || day < 1 || day > 7)) {
+    return NextResponse.json({ error: "Day must be a number between 1 and 7" }, { status: 400 });
+  }
 
   // Get the current meal data before update (needed for calendar sync)
   const { data: currentMeal } = await supabase
     .from("meals")
     .select(`
       id,
+      day,
       meal_type,
       calendar_event_id,
       custom_meal_name,
       recipe_id,
       recipes (name),
       weekly_plan:weekly_plan_id (
-        household_id
+        household_id,
+        week_of
       )
     `)
     .eq("id", params.id)
     .single();
 
+  // Build update object
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const updateData: any = {};
+  if (assigned_user_id !== undefined) {
+    updateData.assigned_user_id = assigned_user_id || null;
+  }
+  if (day !== undefined) {
+    updateData.day = day;
+  }
+
   // Update the meal
   const { data: updatedMeal, error: updateError } = await supabase
     .from("meals")
-    .update({
-      assigned_user_id: assigned_user_id || null,
-    })
+    .update(updateData)
     .eq("id", params.id)
     .select(`
       id,
+      day,
       assigned_user_id,
       assigned_user:users!meals_assigned_user_id_fkey (
         id,
@@ -99,7 +115,8 @@ export async function PATCH(
   if (currentMeal?.calendar_event_id) {
     const accessToken = session.accessToken as string | undefined;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const householdId = (currentMeal.weekly_plan as any)?.household_id;
+    const weeklyPlanData = currentMeal.weekly_plan as any;
+    const householdId = weeklyPlanData?.household_id;
 
     if (accessToken && householdId) {
       // Get household calendar settings
@@ -110,25 +127,44 @@ export async function PATCH(
         .single();
 
       const calendarId = household?.settings?.google_calendar_id;
+      const timezone = household?.settings?.timezone || "America/New_York";
 
       if (calendarId) {
-        // Get the meal name
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const recipeName = (currentMeal.recipes as any)?.name;
-        const mealName = recipeName || currentMeal.custom_meal_name || "Dinner";
-
-        // Get the new assigned user name
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const assignedUser = updatedMeal.assigned_user as any;
-        const assignedUserName = assignedUser?.name;
-
         try {
-          await updateMealCalendarEvent(accessToken, calendarId, currentMeal.calendar_event_id, {
-            mealId: params.id,
-            mealName,
-            mealType: currentMeal.meal_type || "dinner",
-            assignedUserName,
-          });
+          // If day changed, update the calendar event's date/time
+          if (day !== undefined && day !== currentMeal.day && weeklyPlanData?.week_of) {
+            // Calculate new date from week_of + day offset
+            // week_of is Saturday (day 1), so day 1 = 0 days after, day 2 = 1 day after, etc.
+            const weekOfDate = new Date(weeklyPlanData.week_of + "T00:00:00");
+            weekOfDate.setDate(weekOfDate.getDate() + (day - 1));
+            const newDate = weekOfDate.toISOString().split("T")[0]; // YYYY-MM-DD
+
+            await updateMealCalendarEventDateTime(accessToken, calendarId, currentMeal.calendar_event_id, {
+              newDate,
+              mealType: currentMeal.meal_type || "dinner",
+              timezone,
+            });
+          }
+
+          // If assigned user changed, update the event title
+          if (assigned_user_id !== undefined) {
+            // Get the meal name
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const recipeName = (currentMeal.recipes as any)?.name;
+            const mealName = recipeName || currentMeal.custom_meal_name || "Dinner";
+
+            // Get the new assigned user name
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const assignedUser = updatedMeal.assigned_user as any;
+            const assignedUserName = assignedUser?.name;
+
+            await updateMealCalendarEvent(accessToken, calendarId, currentMeal.calendar_event_id, {
+              mealId: params.id,
+              mealName,
+              mealType: currentMeal.meal_type || "dinner",
+              assignedUserName,
+            });
+          }
         } catch (error) {
           console.error("Failed to sync meal to Google Calendar:", error);
           // Don't fail the response, calendar sync is secondary

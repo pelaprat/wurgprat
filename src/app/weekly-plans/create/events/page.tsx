@@ -299,11 +299,11 @@ export default function EventsPage() {
         </div>
         <h1 className="text-2xl font-bold text-gray-900">Event Assignments</h1>
         <p className="text-gray-600 mt-1">
-          Step 3 of 4: Assign who&apos;s responsible for each event
+          Step 4 of 5: Assign who&apos;s responsible for each event
         </p>
       </div>
 
-      {/* Progress indicator */}
+      {/* Progress indicator - 5 steps */}
       <div className="flex items-center gap-2 mb-6">
         <div className="flex items-center">
           <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center text-sm font-medium">
@@ -333,14 +333,27 @@ export default function EventsPage() {
         <div className="flex-1 h-0.5 bg-emerald-600 mx-2"></div>
         <div className="flex items-center">
           <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center text-sm font-medium">
-            3
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path
+                fillRule="evenodd"
+                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </div>
+          <span className="ml-2 text-sm text-emerald-600">Staples</span>
+        </div>
+        <div className="flex-1 h-0.5 bg-emerald-600 mx-2"></div>
+        <div className="flex items-center">
+          <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center text-sm font-medium">
+            4
           </div>
           <span className="ml-2 text-sm font-medium text-gray-900">Events</span>
         </div>
         <div className="flex-1 h-0.5 bg-gray-200 mx-2"></div>
         <div className="flex items-center">
           <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-sm font-medium">
-            4
+            5
           </div>
           <span className="ml-2 text-sm text-gray-500">Groceries</span>
         </div>
@@ -421,7 +434,7 @@ export default function EventsPage() {
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-4 pb-safe md:relative md:border-0 md:p-0 md:mt-8 z-20">
         <div className="flex justify-between items-center max-w-4xl mx-auto">
           <Link
-            href="/weekly-plans/create/review"
+            href="/weekly-plans/create/staples"
             className="px-4 py-3 text-gray-600 hover:text-gray-800 transition-colors flex items-center gap-2 min-h-[44px]"
           >
             <span>&larr;</span>

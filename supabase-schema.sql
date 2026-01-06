@@ -202,11 +202,13 @@ create table grocery_items (
   quantity numeric,
   unit text,
   checked boolean default false,
+  is_staple boolean default false not null,
   added_by uuid references users(id),
   created_at timestamptz default now() not null
 );
 
 comment on table grocery_items is 'Store and department are inherited from the ingredient';
+comment on column grocery_items.is_staple is 'Whether this item is a recurring staple (not from recipes)';
 
 -- Kids table (children in the household)
 create table kids (
@@ -358,6 +360,7 @@ create index idx_meals_recipe on meals(recipe_id);
 create index idx_grocery_list_weekly_plan on grocery_list(weekly_plan_id);
 create index idx_grocery_items_grocery_list on grocery_items(grocery_list_id);
 create index idx_grocery_items_ingredient on grocery_items(ingredient_id);
+create index idx_grocery_items_staple on grocery_items(grocery_list_id, is_staple);
 create index idx_events_household on events(household_id);
 create index idx_events_start_time on events(household_id, start_time);
 create index idx_meals_assigned_user on meals(assigned_user_id);

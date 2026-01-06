@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getServiceSupabase } from "@/lib/supabase";
+import { deleteMealCalendarEvent } from "@/lib/google";
 
 export async function GET(
   request: NextRequest,
@@ -125,7 +126,7 @@ export async function GET(
     // Fetch grocery items
     const { data: rawGroceryItems } = await supabase
       .from("grocery_items")
-      .select("id, quantity, unit, checked, ingredient_id")
+      .select("id, quantity, unit, checked, is_staple, ingredient_id")
       .eq("grocery_list_id", groceryListId);
 
     // Get recipe IDs from meals for this weekly plan
@@ -285,9 +286,10 @@ export async function DELETE(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const accessToken = session.accessToken as string | undefined;
   const supabase = getServiceSupabase();
 
-  // Get user's household
+  // Get user's household and settings
   const { data: user, error: userError } = await supabase
     .from("users")
     .select("household_id")
@@ -298,6 +300,54 @@ export async function DELETE(
     return NextResponse.json({ error: "Household not found" }, { status: 404 });
   }
 
+  // Verify the weekly plan belongs to this household before proceeding
+  const { data: weeklyPlan, error: planError } = await supabase
+    .from("weekly_plan")
+    .select("id")
+    .eq("id", params.id)
+    .eq("household_id", user.household_id)
+    .single();
+
+  if (planError || !weeklyPlan) {
+    return NextResponse.json({ error: "Weekly plan not found" }, { status: 404 });
+  }
+
+  // Get household's Google Calendar settings
+  const { data: household } = await supabase
+    .from("households")
+    .select("settings")
+    .eq("id", user.household_id)
+    .single();
+
+  const calendarId = household?.settings?.google_calendar_id;
+
+  // If we have access token and calendar ID, delete calendar events for meals
+  if (accessToken && calendarId) {
+    // Fetch all meals with calendar_event_ids for this weekly plan
+    const { data: meals } = await supabase
+      .from("meals")
+      .select("id, calendar_event_id")
+      .eq("weekly_plan_id", params.id)
+      .not("calendar_event_id", "is", null);
+
+    if (meals && meals.length > 0) {
+      // Delete each calendar event (don't fail the whole operation if some events can't be deleted)
+      await Promise.all(
+        meals.map(async (meal) => {
+          if (meal.calendar_event_id) {
+            try {
+              await deleteMealCalendarEvent(accessToken, calendarId, meal.calendar_event_id);
+            } catch (error) {
+              console.error(`Failed to delete calendar event ${meal.calendar_event_id}:`, error);
+              // Continue with deletion even if calendar event deletion fails
+            }
+          }
+        })
+      );
+    }
+  }
+
+  // Delete the weekly plan (meals will be cascade deleted)
   const { error: deleteError } = await supabase
     .from("weekly_plan")
     .delete()

@@ -5,7 +5,19 @@ import { useSession } from "next-auth/react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { DAY_NAMES } from "@/constants/calendar";
+import { getDepartmentSortIndex } from "@/constants/grocery";
 import { WeeklyPlanDetailSkeleton } from "@/components/Skeleton";
+import {
+  DndContext,
+  DragOverlay,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragStartEvent,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
 
 interface Recipe {
   id: string;
@@ -71,6 +83,7 @@ interface GroceryItem {
   quantity?: number;
   unit?: string;
   checked: boolean;
+  is_staple?: boolean;
   ingredients: Ingredient | null;
   recipe_breakdown?: RecipeBreakdown[];
 }
@@ -303,6 +316,60 @@ function MultiAssigneeDropdown({
   );
 }
 
+// Draggable Meal Component
+function DraggableMeal({
+  meal,
+  children,
+}: {
+  meal: Meal;
+  children: React.ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: meal.id,
+    data: { meal },
+  });
+
+  const style = transform
+    ? {
+        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+        opacity: isDragging ? 0.5 : 1,
+      }
+    : undefined;
+
+  return (
+    <div ref={setNodeRef} style={style} {...listeners} {...attributes}>
+      {children}
+    </div>
+  );
+}
+
+// Droppable Day Zone Component
+function DroppableDay({
+  dayIndex,
+  children,
+  isOver,
+}: {
+  dayIndex: number;
+  children: React.ReactNode;
+  isOver?: boolean;
+}) {
+  const { setNodeRef, isOver: isOverDroppable } = useDroppable({
+    id: `day-${dayIndex}`,
+    data: { day: dayIndex },
+  });
+
+  const showHighlight = isOver ?? isOverDroppable;
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`transition-colors rounded-lg ${showHighlight ? "bg-emerald-100 ring-2 ring-emerald-400" : ""}`}
+    >
+      {children}
+    </div>
+  );
+}
+
 export default function WeeklyPlanDetailPage() {
   const { data: session } = useSession();
   const params = useParams();
@@ -323,6 +390,42 @@ export default function WeeklyPlanDetailPage() {
     type: "success" | "error" | "info";
     text: string;
   } | null>(null);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
+  const [activeDragMeal, setActiveDragMeal] = useState<Meal | null>(null);
+
+  // DnD sensors - only activate on desktop with sufficient drag distance
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    })
+  );
+
+  const handleDragStart = (event: DragStartEvent) => {
+    const { active } = event;
+    const meal = weeklyPlan?.meals.find((m) => m.id === active.id);
+    if (meal) {
+      setActiveDragMeal(meal);
+    }
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveDragMeal(null);
+
+    if (!over) return;
+
+    // Extract the day from the droppable id (format: "day-{index}")
+    const overIdStr = String(over.id);
+    if (!overIdStr.startsWith("day-")) return;
+
+    const newDay = parseInt(overIdStr.replace("day-", "")) + 1; // +1 because days are 1-indexed
+    const mealId = String(active.id);
+
+    handleMoveMeal(mealId, newDay);
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -471,6 +574,55 @@ export default function WeeklyPlanDetailPage() {
     }
   };
 
+  const handleMoveMeal = async (mealId: string, newDay: number) => {
+    // Find the meal to get its current day
+    const meal = weeklyPlan?.meals.find((m) => m.id === mealId);
+    if (!meal || meal.day === newDay) return;
+
+    setUpdatingMeals((prev) => new Set(prev).add(mealId));
+
+    // Optimistic update
+    setWeeklyPlan((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        meals: prev.meals.map((m) =>
+          m.id === mealId ? { ...m, day: newDay } : m
+        ),
+      };
+    });
+
+    try {
+      const response = await fetch(`/api/meals/${mealId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ day: newDay }),
+      });
+
+      if (!response.ok) {
+        // Revert on error - refetch
+        const planResponse = await fetch(`/api/weekly-plans/${params.id}`);
+        if (planResponse.ok) {
+          const data = await planResponse.json();
+          setWeeklyPlan(data.weeklyPlan);
+        }
+      }
+    } catch {
+      // Revert on error - refetch
+      const planResponse = await fetch(`/api/weekly-plans/${params.id}`);
+      if (planResponse.ok) {
+        const data = await planResponse.json();
+        setWeeklyPlan(data.weeklyPlan);
+      }
+    } finally {
+      setUpdatingMeals((prev) => {
+        const next = new Set(prev);
+        next.delete(mealId);
+        return next;
+      });
+    }
+  };
+
   const handleEventAssigneesChange = async (eventId: string, userIds: string[]) => {
     setUpdatingEvents((prev) => new Set(prev).add(eventId));
 
@@ -590,6 +742,33 @@ export default function WeeklyPlanDetailPage() {
     }
   };
 
+  const handleRegenerateGroceryList = async () => {
+    setShowRegenerateConfirm(false);
+    setIsRegenerating(true);
+
+    try {
+      const response = await fetch(`/api/weekly-plans/${params.id}/regenerate-grocery-list`, {
+        method: "POST",
+      });
+
+      if (response.ok) {
+        // Refetch the full weekly plan data to get updated grocery list with recipe breakdown
+        const planResponse = await fetch(`/api/weekly-plans/${params.id}`);
+        if (planResponse.ok) {
+          const data = await planResponse.json();
+          setWeeklyPlan(data.weeklyPlan);
+        }
+      } else {
+        const data = await response.json();
+        alert(data.error || "Failed to regenerate grocery list");
+      }
+    } catch {
+      alert("Failed to regenerate grocery list. Please try again.");
+    } finally {
+      setIsRegenerating(false);
+    }
+  };
+
   const formatWeekOf = (dateStr: string) => {
     const date = new Date(dateStr + "T00:00:00");
     const endDate = new Date(date);
@@ -636,33 +815,57 @@ export default function WeeklyPlanDetailPage() {
 
   const groceryList = weeklyPlan?.grocery_list?.[0];
 
-  const groceryItemsByStore = useMemo(() => {
-    if (!groceryList?.grocery_items) return new Map<string, GroceryItem[]>();
+  // Group by store, then by department within each store
+  const groceryItemsByStoreAndDept = useMemo(() => {
+    if (!groceryList?.grocery_items) return new Map<string, Map<string, GroceryItem[]>>();
 
-    const grouped = new Map<string, GroceryItem[]>();
+    // First, group by store
+    const byStore = new Map<string, GroceryItem[]>();
     groceryList.grocery_items.forEach((item) => {
       const store = item.ingredients?.store_name || "No Store Assigned";
-      if (!grouped.has(store)) {
-        grouped.set(store, []);
+      if (!byStore.has(store)) {
+        byStore.set(store, []);
       }
-      grouped.get(store)!.push(item);
+      byStore.get(store)!.push(item);
     });
 
-    grouped.forEach((items) => {
-      items.sort((a, b) => {
-        const nameA = a.ingredients?.name || "";
-        const nameB = b.ingredients?.name || "";
-        return nameA.localeCompare(nameB);
+    // Then, within each store, group by department
+    const result = new Map<string, Map<string, GroceryItem[]>>();
+    byStore.forEach((items, store) => {
+      const byDept = new Map<string, GroceryItem[]>();
+      items.forEach((item) => {
+        const dept = item.ingredients?.department || "Other";
+        if (!byDept.has(dept)) {
+          byDept.set(dept, []);
+        }
+        byDept.get(dept)!.push(item);
       });
+
+      // Sort items within each department by name
+      byDept.forEach((deptItems) => {
+        deptItems.sort((a, b) => {
+          const nameA = a.ingredients?.name || "";
+          const nameB = b.ingredients?.name || "";
+          return nameA.localeCompare(nameB);
+        });
+      });
+
+      // Sort departments by predefined order
+      const sortedDepts = Array.from(byDept.entries()).sort((a, b) => {
+        return getDepartmentSortIndex(a[0]) - getDepartmentSortIndex(b[0]);
+      });
+
+      result.set(store, new Map(sortedDepts));
     });
 
-    const sortedEntries = Array.from(grouped.entries()).sort((a, b) => {
+    // Sort stores (No Store Assigned last)
+    const sortedStores = Array.from(result.entries()).sort((a, b) => {
       if (a[0] === "No Store Assigned") return 1;
       if (b[0] === "No Store Assigned") return -1;
       return a[0].localeCompare(b[0]);
     });
 
-    return new Map(sortedEntries);
+    return new Map(sortedStores);
   }, [groceryList?.grocery_items]);
 
   const checkedCount = groceryList?.grocery_items.filter((i) => i.checked).length || 0;
@@ -814,7 +1017,31 @@ export default function WeeklyPlanDetailPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
               </div>
-              <p className="text-gray-500">No grocery list for this week.</p>
+              <p className="text-gray-500 mb-4">No grocery list for this week.</p>
+              {weeklyPlan.meals?.some((m) => m.recipes) && (
+                <button
+                  onClick={handleRegenerateGroceryList}
+                  disabled={isRegenerating}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isRegenerating ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      Generate Grocery List
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           ) : (
             <>
@@ -828,70 +1055,143 @@ export default function WeeklyPlanDetailPage() {
                 <span className="text-sm font-medium text-gray-600">
                   {checkedCount} of {totalCount} items
                 </span>
+                <button
+                  onClick={() => setShowRegenerateConfirm(true)}
+                  disabled={isRegenerating}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-100 border border-gray-200 rounded-lg hover:bg-gray-200 active:bg-gray-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Regenerate grocery list from current recipes"
+                >
+                  {isRegenerating ? (
+                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  )}
+                  <span className="hidden sm:inline">Regenerate</span>
+                </button>
               </div>
 
+              {/* Regenerate Confirmation Dialog */}
+              {showRegenerateConfirm && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+                  <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Regenerate Grocery List?</h3>
+                    <p className="text-gray-600 mb-6">
+                      This will replace all grocery items, including any you&apos;ve already checked off. The list will be regenerated based on the current dinner recipes.
+                    </p>
+                    <div className="flex gap-3 justify-end">
+                      <button
+                        onClick={() => setShowRegenerateConfirm(false)}
+                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleRegenerateGroceryList}
+                        className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors"
+                      >
+                        Regenerate
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-4">
-                {Array.from(groceryItemsByStore.entries()).map(([store, items]) => {
-                  const storeCheckedCount = items.filter((i) => i.checked).length;
-                  const allChecked = storeCheckedCount === items.length;
+                {Array.from(groceryItemsByStoreAndDept.entries()).map(([store, deptMap]) => {
+                  const allStoreItems = Array.from(deptMap.values()).flat();
+                  const storeCheckedCount = allStoreItems.filter((i) => i.checked).length;
+                  const allStoreChecked = storeCheckedCount === allStoreItems.length;
 
                   return (
-                    <div key={store} className="bg-white rounded-xl shadow-sm overflow-hidden">
-                      <div className={`px-4 py-3 border-b flex items-center justify-between ${allChecked ? "bg-emerald-50" : "bg-gray-50"}`}>
+                    <div key={store} className="bg-white rounded-xl shadow-sm">
+                      {/* Store Header - Sticky */}
+                      <div className={`px-4 py-3 border-b border-l-4 flex items-center justify-between sticky top-0 z-20 rounded-t-xl ${allStoreChecked ? "bg-emerald-100 border-l-emerald-500" : "bg-sky-100 border-l-sky-500"}`}>
                         <div className="flex items-center gap-2">
-                          <svg className={`w-5 h-5 ${allChecked ? "text-emerald-600" : "text-gray-500"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className={`w-5 h-5 ${allStoreChecked ? "text-emerald-600" : "text-sky-600"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                           </svg>
-                          <h3 className={`font-semibold ${allChecked ? "text-emerald-700" : "text-gray-900"}`}>
+                          <h3 className={`font-semibold ${allStoreChecked ? "text-emerald-700" : "text-sky-900"}`}>
                             {store}
                           </h3>
                         </div>
-                        <span className={`text-sm font-medium ${allChecked ? "text-emerald-600" : "text-gray-500"}`}>
-                          {storeCheckedCount}/{items.length}
+                        <span className={`text-sm font-medium ${allStoreChecked ? "text-emerald-600" : "text-sky-700"}`}>
+                          {storeCheckedCount}/{allStoreItems.length}
                         </span>
                       </div>
-                      <div className="divide-y divide-gray-100">
-                        {items.map((item) => (
-                          <label
-                            key={item.id}
-                            className={`flex items-start px-4 py-3 cursor-pointer transition-colors ${
-                              updatingItems.has(item.id) ? "opacity-50" : "hover:bg-gray-50"
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={item.checked}
-                              onChange={() => handleToggleGroceryItem(item.id, item.checked)}
-                              disabled={updatingItems.has(item.id)}
-                              className="h-5 w-5 mt-0.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer flex-shrink-0"
-                            />
-                            <div className="ml-3 flex-1 min-w-0">
-                              <div className="flex items-center justify-between gap-2">
-                                <span className={`font-medium ${item.checked ? "text-gray-400 line-through" : "text-gray-900"}`}>
-                                  {item.ingredients?.name || "Unknown item"}
-                                </span>
-                                {item.quantity && (
-                                  <span className={`text-sm font-medium ${item.checked ? "text-gray-400" : "text-gray-600"}`}>
-                                    {item.quantity}{item.unit ? ` ${item.unit}` : ""}
-                                  </span>
-                                )}
-                              </div>
-                              {item.recipe_breakdown && item.recipe_breakdown.length > 0 && (
-                                <div className={`mt-1 text-xs space-y-0.5 ${item.checked ? "text-gray-400" : "text-gray-500"}`}>
-                                  {item.recipe_breakdown.map((rb, idx) => (
-                                    <div key={idx} className="flex justify-between">
-                                      <span className="truncate mr-2">{rb.recipe_name}</span>
-                                      <span className="whitespace-nowrap">
-                                        {rb.quantity ?? "—"}{rb.unit ? ` ${rb.unit}` : ""}
-                                      </span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
+
+                      {/* Departments within Store */}
+                      {Array.from(deptMap.entries()).map(([dept, items]) => {
+                        const deptCheckedCount = items.filter((i) => i.checked).length;
+                        const allDeptChecked = deptCheckedCount === items.length;
+
+                        return (
+                          <div key={dept}>
+                            {/* Department Header - Sticky below store header */}
+                            <div className={`px-4 py-2 border-b border-l-4 flex items-center justify-between sticky top-[48px] z-10 ${allDeptChecked ? "bg-emerald-50 border-l-emerald-400" : "bg-amber-50 border-l-amber-400"}`}>
+                              <span className={`text-sm font-medium ${allDeptChecked ? "text-emerald-700" : "text-gray-700"}`}>
+                                {dept}
+                              </span>
+                              <span className={`text-xs font-medium ${allDeptChecked ? "text-emerald-600" : "text-gray-500"}`}>
+                                {deptCheckedCount}/{items.length}
+                              </span>
                             </div>
-                          </label>
-                        ))}
-                      </div>
+
+                            {/* Items in Department */}
+                            <div className="divide-y divide-gray-100">
+                              {items.map((item) => (
+                                <label
+                                  key={item.id}
+                                  className={`flex items-start px-4 py-3 cursor-pointer transition-colors ${
+                                    updatingItems.has(item.id) ? "opacity-50" : "hover:bg-gray-50"
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={item.checked}
+                                    onChange={() => handleToggleGroceryItem(item.id, item.checked)}
+                                    disabled={updatingItems.has(item.id)}
+                                    className="h-5 w-5 mt-0.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer flex-shrink-0"
+                                  />
+                                  <div className="ml-3 flex-1 min-w-0">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className={`font-medium ${item.checked ? "text-gray-400 line-through" : "text-gray-900"}`}>
+                                        {item.ingredients?.name || "Unknown item"}
+                                        {item.is_staple && (
+                                          <span className="ml-2 text-xs px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded">
+                                            Staple
+                                          </span>
+                                        )}
+                                      </span>
+                                      {item.quantity && (
+                                        <span className={`text-sm font-medium ${item.checked ? "text-gray-400" : "text-gray-600"}`}>
+                                          {item.quantity}{item.unit ? ` ${item.unit}` : ""}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {item.recipe_breakdown && item.recipe_breakdown.length > 0 && (
+                                      <div className={`mt-1 text-xs space-y-0.5 ${item.checked ? "text-gray-400" : "text-gray-500"}`}>
+                                        {item.recipe_breakdown.map((rb, idx) => (
+                                          <div key={idx} className="flex justify-between">
+                                            <span className="truncate mr-2">{rb.recipe_name}</span>
+                                            <span className="whitespace-nowrap">
+                                              {rb.quantity ?? "—"}{rb.unit ? ` ${rb.unit}` : ""}
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   );
                 })}
@@ -912,138 +1212,178 @@ export default function WeeklyPlanDetailPage() {
         </div>
       ) : activeTab === "dinner" ? (
         /* Dinner Plans Tab - 3-column Table Layout */
-        <div className="space-y-4">
-          {/* Sync to Calendar Section */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-1">
-            <p className="text-sm text-gray-500">
-              Sync dinner plans to your Google Calendar
-            </p>
-            <button
-              onClick={handleSyncToCalendar}
-              disabled={isSyncingCalendar}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 active:bg-blue-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSyncingCalendar ? (
-                <>
-                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  Syncing...
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                  Sync to Calendar
-                </>
-              )}
-            </button>
-          </div>
-
-          {syncMessage && (
-            <div
-              className={`p-3 rounded-lg text-sm ${
-                syncMessage.type === "success"
-                  ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-                  : syncMessage.type === "error"
-                  ? "bg-red-50 text-red-800 border border-red-200"
-                  : "bg-blue-50 text-blue-800 border border-blue-200"
-              }`}
-            >
-              {syncMessage.text}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
+          <div className="space-y-4">
+            {/* Sync to Calendar Section */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-1">
+              <p className="text-sm text-gray-500">
+                Sync dinner plans to your Google Calendar
+              </p>
+              <button
+                onClick={handleSyncToCalendar}
+                disabled={isSyncingCalendar}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 active:bg-blue-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSyncingCalendar ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Syncing...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    Sync to Calendar
+                  </>
+                )}
+              </button>
             </div>
-          )}
 
-          <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-            <div className="divide-y divide-gray-100">
-              {DAY_NAMES.map((dayName, index) => {
-                const meals = getMealsForDay(index + 1);
-                const today = isToday(index);
+            {syncMessage && (
+              <div
+                className={`p-3 rounded-lg text-sm ${
+                  syncMessage.type === "success"
+                    ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                    : syncMessage.type === "error"
+                    ? "bg-red-50 text-red-800 border border-red-200"
+                    : "bg-blue-50 text-blue-800 border border-blue-200"
+                }`}
+              >
+                {syncMessage.text}
+              </div>
+            )}
 
-                return (
-                  <div
-                    key={index}
-                    className={`flex items-center gap-4 p-4 ${today ? "bg-emerald-50" : "hover:bg-gray-50"} transition-colors`}
-                  >
-                    {/* Date Column - iCal Style */}
-                    <div className="flex-shrink-0">
-                      <DateIcon dayIndex={index} weekOf={weeklyPlan.week_of} isHighlighted={today} />
-                    </div>
+            <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+              <div className="divide-y divide-gray-100">
+                {DAY_NAMES.map((dayName, index) => {
+                  const meals = getMealsForDay(index + 1);
+                  const today = isToday(index);
 
-                    {/* Day Name & Meals Column */}
-                    <div className="flex-1 min-w-0">
-                      <div className={`text-sm font-semibold mb-1 ${today ? "text-emerald-700" : "text-gray-700"}`}>
-                        {dayName}
-                        {today && <span className="ml-2 text-xs font-medium bg-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full">Today</span>}
-                      </div>
-                      {meals.length > 0 ? (
-                        <div className="space-y-1">
-                          {meals.map((meal) => (
-                            <div key={meal.id} className="flex items-center gap-2">
-                              {meal.recipes ? (
-                                <Link
-                                  href={`/recipes/${meal.recipes.id}`}
-                                  className="font-medium text-gray-900 hover:text-emerald-600 transition-colors truncate"
-                                >
-                                  {meal.recipes.name}
-                                </Link>
-                              ) : meal.custom_meal_name ? (
-                                <span className="font-medium text-gray-900 truncate">
-                                  {meal.custom_meal_name}
-                                </span>
-                              ) : (
-                                <span className="text-gray-400 italic">No meal</span>
-                              )}
-                              {meal.is_leftover && (
-                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700 flex-shrink-0">
-                                  Leftovers
-                                </span>
-                              )}
+                  return (
+                    <DroppableDay key={index} dayIndex={index}>
+                      <div
+                        className={`flex items-center gap-4 p-4 ${today ? "bg-emerald-50" : "hover:bg-gray-50"} transition-colors`}
+                      >
+                        {/* Date Column - iCal Style */}
+                        <div className="flex-shrink-0">
+                          <DateIcon dayIndex={index} weekOf={weeklyPlan.week_of} isHighlighted={today} />
+                        </div>
+
+                        {/* Day Name & Meals Column */}
+                        <div className="flex-1 min-w-0">
+                          <div className={`text-sm font-semibold mb-1 ${today ? "text-emerald-700" : "text-gray-700"}`}>
+                            {dayName}
+                            {today && <span className="ml-2 text-xs font-medium bg-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full">Today</span>}
+                          </div>
+                          {meals.length > 0 ? (
+                            <div className="space-y-1">
+                              {meals.map((meal) => (
+                                <DraggableMeal key={meal.id} meal={meal}>
+                                  <div className="flex items-center gap-2">
+                                    {/* Drag handle for desktop */}
+                                    <div className="hidden md:flex items-center cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 flex-shrink-0" title="Drag to move">
+                                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M7 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 2zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 14zm6-8a2 2 0 1 0-.001-4.001A2 2 0 0 0 13 6zm0 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 14z" />
+                                      </svg>
+                                    </div>
+                                    {meal.recipes ? (
+                                      <Link
+                                        href={`/recipes/${meal.recipes.id}`}
+                                        className="font-medium text-gray-900 hover:text-emerald-600 transition-colors truncate"
+                                      >
+                                        {meal.recipes.name}
+                                      </Link>
+                                    ) : meal.custom_meal_name ? (
+                                      <span className="font-medium text-gray-900 truncate">
+                                        {meal.custom_meal_name}
+                                      </span>
+                                    ) : (
+                                      <span className="text-gray-400 italic">No meal</span>
+                                    )}
+                                    {meal.is_leftover && (
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700 flex-shrink-0">
+                                        Leftovers
+                                      </span>
+                                    )}
+                                    {/* Mobile day selector */}
+                                    <select
+                                      value={meal.day}
+                                      onChange={(e) => handleMoveMeal(meal.id, parseInt(e.target.value))}
+                                      disabled={updatingMeals.has(meal.id)}
+                                      className="md:hidden ml-auto px-2 py-1 text-xs border border-gray-200 rounded-lg bg-white text-gray-600 focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:opacity-50"
+                                    >
+                                      {DAY_NAMES.map((name, idx) => (
+                                        <option key={idx} value={idx + 1}>
+                                          {name.slice(0, 3)}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                </DraggableMeal>
+                              ))}
                             </div>
-                          ))}
+                          ) : (
+                            <span className="text-sm text-gray-400 italic">No dinner planned</span>
+                          )}
                         </div>
-                      ) : (
-                        <span className="text-sm text-gray-400 italic">No dinner planned</span>
-                      )}
-                    </div>
 
-                    {/* Assignee Column */}
-                    <div className="flex-shrink-0">
-                      {meals.length > 0 ? (
-                        <div className="space-y-1">
-                          {meals.map((meal) => (
-                            <AssigneeDropdown
-                              key={meal.id}
-                              currentAssignee={meal.assigned_user}
-                              members={householdMembers}
-                              onSelect={(userId) => handleMealAssigneeChange(meal.id, userId)}
-                              isUpdating={updatingMeals.has(meal.id)}
-                            />
-                          ))}
+                        {/* Assignee Column */}
+                        <div className="flex-shrink-0">
+                          {meals.length > 0 ? (
+                            <div className="space-y-1">
+                              {meals.map((meal) => (
+                                <AssigneeDropdown
+                                  key={meal.id}
+                                  currentAssignee={meal.assigned_user}
+                                  members={householdMembers}
+                                  onSelect={(userId) => handleMealAssigneeChange(meal.id, userId)}
+                                  isUpdating={updatingMeals.has(meal.id)}
+                                />
+                              ))}
+                            </div>
+                          ) : null}
                         </div>
-                      ) : null}
-                    </div>
-                  </div>
-                );
-              })}
+                      </div>
+                    </DroppableDay>
+                  );
+                })}
+              </div>
             </div>
+
+            {/* Notes */}
+            {weeklyPlan.notes && (
+              <div className="bg-white rounded-xl shadow-sm p-4">
+                <h2 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                  <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  Notes
+                </h2>
+                <p className="text-gray-600 whitespace-pre-wrap">{weeklyPlan.notes}</p>
+              </div>
+            )}
           </div>
 
-          {/* Notes */}
-          {weeklyPlan.notes && (
-            <div className="bg-white rounded-xl shadow-sm p-4">
-              <h2 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-                Notes
-              </h2>
-              <p className="text-gray-600 whitespace-pre-wrap">{weeklyPlan.notes}</p>
-            </div>
-          )}
-        </div>
+          {/* Drag Overlay - shows a preview of the dragged meal */}
+          <DragOverlay>
+            {activeDragMeal ? (
+              <div className="bg-white shadow-lg rounded-lg px-3 py-2 border-2 border-emerald-400">
+                <span className="font-medium text-gray-900">
+                  {activeDragMeal.recipes?.name || activeDragMeal.custom_meal_name || "Meal"}
+                </span>
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       ) : (
         /* Events Tab - 3-column Table Layout matching Dinner Plans */
         <div className="space-y-4">

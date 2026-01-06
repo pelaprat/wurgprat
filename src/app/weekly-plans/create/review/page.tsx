@@ -46,19 +46,28 @@ function useIsMobile() {
   return isMobile;
 }
 
+interface Recipe {
+  id: string;
+  name: string;
+  time_rating: number | null;
+  category: string | null;
+  cuisine: string | null;
+}
+
 interface DraggableMealProps {
   meal: ProposedMeal;
   onReplace: (mealId: string) => void;
   onRemove: (mealId: string) => void;
   onAssign: (mealId: string, userId: string | undefined) => void;
   onMove: (meal: ProposedMeal) => void;
+  onPickRecipe: (mealId: string) => void;
   isReplacing: boolean;
   canRemove: boolean;
   householdMembers: HouseholdMember[];
   isMobile: boolean;
 }
 
-function DraggableMeal({ meal, onReplace, onRemove, onAssign, onMove, isReplacing, canRemove, householdMembers, isMobile }: DraggableMealProps) {
+function DraggableMeal({ meal, onReplace, onRemove, onAssign, onMove, onPickRecipe, isReplacing, canRemove, householdMembers, isMobile }: DraggableMealProps) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `meal-${meal.mealId}`,
     data: { mealId: meal.mealId, day: meal.day },
@@ -133,15 +142,6 @@ function DraggableMeal({ meal, onReplace, onRemove, onAssign, onMove, isReplacin
                   {timeRating.label}
                 </span>
               )}
-              {meal.isAiSuggested ? (
-                <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded">
-                  AI suggested
-                </span>
-              ) : (
-                <span className="text-xs px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded">
-                  Your pick
-                </span>
-              )}
             </div>
             {meal.aiReasoning && (
               <p className="text-xs text-gray-500 mt-2 italic">
@@ -173,10 +173,29 @@ function DraggableMeal({ meal, onReplace, onRemove, onAssign, onMove, isReplacin
 
         <div className="flex items-center gap-1 flex-shrink-0">
           <button
+            onClick={() => onPickRecipe(meal.mealId)}
+            className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1"
+            title="Choose a recipe"
+          >
+            <svg
+              className="w-3 h-3"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
+            </svg>
+          </button>
+          <button
             onClick={() => onReplace(meal.mealId)}
             disabled={isReplacing}
             className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-            title="Get new suggestion"
+            title="Get new AI suggestion"
           >
             {isReplacing ? (
               <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-600"></div>
@@ -262,6 +281,7 @@ interface DaySlotProps {
   onRemove: (mealId: string) => void;
   onAssign: (mealId: string, userId: string | undefined) => void;
   onMove: (meal: ProposedMeal) => void;
+  onPickRecipe: (mealId: string) => void;
   onAddMeal: (day: number, date: string) => void;
   replacingMealId: string | null;
   isDraggedOver: boolean;
@@ -278,6 +298,7 @@ function DaySlot({
   onRemove,
   onAssign,
   onMove,
+  onPickRecipe,
   onAddMeal,
   replacingMealId,
   isDraggedOver,
@@ -363,8 +384,9 @@ function DaySlot({
                 onRemove={onRemove}
                 onAssign={onAssign}
                 onMove={onMove}
+                onPickRecipe={onPickRecipe}
                 isReplacing={replacingMealId === meal.mealId}
-                canRemove={meals.length > 1}
+                canRemove={true}
                 householdMembers={householdMembers}
                 isMobile={isMobile}
               />
@@ -403,6 +425,10 @@ export default function ReviewPage() {
   const [isAddingMeal, setIsAddingMeal] = useState(false);
   const [householdMembers, setHouseholdMembers] = useState<HouseholdMember[]>([]);
   const [movingMeal, setMovingMeal] = useState<ProposedMeal | null>(null);
+  const [pickingRecipeForMealId, setPickingRecipeForMealId] = useState<string | null>(null);
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [recipesLoading, setRecipesLoading] = useState(false);
+  const [recipeSearch, setRecipeSearch] = useState("");
 
   // Fetch household members
   useEffect(() => {
@@ -582,6 +608,46 @@ export default function ReviewPage() {
     setMovingMeal(null);
   };
 
+  // Handle opening recipe picker
+  const handleOpenRecipePicker = async (mealId: string) => {
+    setPickingRecipeForMealId(mealId);
+    setRecipeSearch("");
+
+    // Fetch recipes if not already loaded
+    if (recipes.length === 0) {
+      setRecipesLoading(true);
+      try {
+        const response = await fetch("/api/recipes?status=made");
+        if (response.ok) {
+          const data = await response.json();
+          setRecipes(data.recipes || []);
+        }
+      } catch (err) {
+        console.error("Failed to fetch recipes:", err);
+      } finally {
+        setRecipesLoading(false);
+      }
+    }
+  };
+
+  // Handle selecting a recipe from the picker
+  const handleSelectRecipe = (recipe: Recipe) => {
+    if (!pickingRecipeForMealId) return;
+    wizard.updateMealById(pickingRecipeForMealId, {
+      recipeId: recipe.id,
+      recipeName: recipe.name,
+      recipeTimeRating: recipe.time_rating ?? undefined,
+      aiReasoning: undefined,
+      isAiSuggested: false,
+    });
+    setPickingRecipeForMealId(null);
+  };
+
+  // Filter recipes based on search
+  const filteredRecipes = recipes.filter((recipe) =>
+    recipe.name.toLowerCase().includes(recipeSearch.toLowerCase())
+  );
+
   // Handle add meal to day
   const handleAddMeal = async (day: number, date: string) => {
     setIsAddingMeal(true);
@@ -634,12 +700,8 @@ export default function ReviewPage() {
       return;
     }
     setError(null);
-    // If there are events for this week, go to events assignment step
-    if (wizard.weekEvents.length > 0) {
-      router.push("/weekly-plans/create/events");
-    } else {
-      router.push("/weekly-plans/create/groceries");
-    }
+    // Always go to staples step next
+    router.push("/weekly-plans/create/staples");
   };
 
   if (!session) {
@@ -686,11 +748,11 @@ export default function ReviewPage() {
         </div>
         <h1 className="text-2xl font-bold text-gray-900">Review Meal Plan</h1>
         <p className="text-gray-600 mt-1">
-          Step 2 of 4: Review meals and assign who&apos;s cooking
+          Step 2 of 5: Review meals and assign who&apos;s cooking
         </p>
       </div>
 
-      {/* Progress indicator */}
+      {/* Progress indicator - 5 steps */}
       <div className="flex items-center gap-2 mb-6">
         <div className="flex items-center">
           <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center text-sm font-medium">
@@ -716,12 +778,19 @@ export default function ReviewPage() {
           <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-sm font-medium">
             3
           </div>
-          <span className="ml-2 text-sm text-gray-500">Events</span>
+          <span className="ml-2 text-sm text-gray-500">Staples</span>
         </div>
         <div className="flex-1 h-0.5 bg-gray-200 mx-2"></div>
         <div className="flex items-center">
           <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-sm font-medium">
             4
+          </div>
+          <span className="ml-2 text-sm text-gray-500">Events</span>
+        </div>
+        <div className="flex-1 h-0.5 bg-gray-200 mx-2"></div>
+        <div className="flex items-center">
+          <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-sm font-medium">
+            5
           </div>
           <span className="ml-2 text-sm text-gray-500">Groceries</span>
         </div>
@@ -780,6 +849,7 @@ export default function ReviewPage() {
                 onRemove={handleRemoveMeal}
                 onAssign={handleAssignUser}
                 onMove={handleOpenMoveModal}
+                onPickRecipe={handleOpenRecipePicker}
                 onAddMeal={handleAddMeal}
                 replacingMealId={replacingMealId}
                 isDraggedOver={false}
@@ -860,6 +930,90 @@ export default function ReviewPage() {
             <div className="px-4 py-3 border-t bg-gray-50">
               <button
                 onClick={() => setMovingMeal(null)}
+                className="w-full py-3 text-gray-600 hover:text-gray-800 transition-colors min-h-[44px]"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Recipe picker modal */}
+      {pickingRecipeForMealId && (
+        <div className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-in slide-in-from-bottom duration-200 md:animate-none max-h-[80vh] flex flex-col">
+            <div className="px-4 py-3 border-b bg-gray-50 flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-gray-900">Choose a Recipe</h3>
+                <button
+                  onClick={() => setPickingRecipeForMealId(null)}
+                  className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                  <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div className="mt-2">
+                <input
+                  type="text"
+                  placeholder="Search recipes..."
+                  value={recipeSearch}
+                  onChange={(e) => setRecipeSearch(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2">
+              {recipesLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-600"></div>
+                </div>
+              ) : filteredRecipes.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  {recipeSearch ? "No recipes match your search" : "No recipes found"}
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {filteredRecipes.map((recipe) => {
+                    const timeRating = recipe.time_rating
+                      ? { label: TIME_RATING_LABELS[recipe.time_rating], color: TIME_RATING_COLORS[recipe.time_rating] }
+                      : null;
+                    const isUsed = wizard.proposedMeals.some((m) => m.recipeId === recipe.id);
+
+                    return (
+                      <button
+                        key={recipe.id}
+                        onClick={() => handleSelectRecipe(recipe)}
+                        disabled={isUsed}
+                        className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center justify-between gap-2 ${
+                          isUsed
+                            ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                            : "hover:bg-emerald-50 active:bg-emerald-100"
+                        }`}
+                      >
+                        <span className="font-medium truncate">{recipe.name}</span>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {timeRating && (
+                            <span className={`text-xs px-1.5 py-0.5 rounded ${timeRating.color}`}>
+                              {timeRating.label}
+                            </span>
+                          )}
+                          {isUsed && (
+                            <span className="text-xs text-gray-400">In use</span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <div className="px-4 py-3 border-t bg-gray-50 flex-shrink-0">
+              <button
+                onClick={() => setPickingRecipeForMealId(null)}
                 className="w-full py-3 text-gray-600 hover:text-gray-800 transition-colors min-h-[44px]"
               >
                 Cancel

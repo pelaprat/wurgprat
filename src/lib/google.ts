@@ -249,6 +249,41 @@ export async function updateMealCalendarEvent(
   }
 }
 
+// Update a Google Calendar event's date/time when a meal is moved to a different day
+export async function updateMealCalendarEventDateTime(
+  accessToken: string,
+  calendarId: string,
+  eventId: string,
+  options: {
+    newDate: string;      // YYYY-MM-DD format
+    mealType: string;
+    timezone?: string;
+  }
+): Promise<boolean> {
+  const { newDate, mealType, timezone } = options;
+
+  const startTime = getMealTime(newDate, mealType);
+  const endTime = new Date(startTime.getTime() + 60 * 60 * 1000); // 1 hour
+  const tz = timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  try {
+    await updateCalendarEvent(accessToken, calendarId, eventId, {
+      start: {
+        dateTime: startTime.toISOString(),
+        timeZone: tz,
+      },
+      end: {
+        dateTime: endTime.toISOString(),
+        timeZone: tz,
+      },
+    });
+    return true;
+  } catch (error) {
+    console.error("Failed to update meal calendar event date/time:", error);
+    return false;
+  }
+}
+
 // Delete a Google Calendar event for a meal
 export async function deleteMealCalendarEvent(
   accessToken: string,

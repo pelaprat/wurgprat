@@ -34,7 +34,6 @@ export default function GroceriesPage() {
   const [editingItem, setEditingItem] = useState<EditingItem | null>(null);
   const [newItemName, setNewItemName] = useState("");
   const [newItemDepartment, setNewItemDepartment] = useState("Pantry");
-  const [sortBy, setSortBy] = useState<"ingredient" | "department" | "store">("department");
 
   // Fetch stores on mount
   useEffect(() => {
@@ -78,6 +77,7 @@ export default function GroceriesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           meals: wizard.proposedMeals,
+          stapleItems: wizard.stapleItems,
         }),
       });
 
@@ -96,29 +96,54 @@ export default function GroceriesPage() {
     }
   };
 
-  // Sorted grocery items
-  const sortedItems = useMemo(() => {
-    const items = [...wizard.groceryItems].filter((i) => !i.checked);
+  // Group by store, then by department within each store
+  const groceryItemsByStoreAndDept = useMemo(() => {
+    const items = wizard.groceryItems.filter((i) => !i.checked);
 
-    items.sort((a, b) => {
-      if (sortBy === "ingredient") {
-        return a.ingredientName.localeCompare(b.ingredientName);
-      } else if (sortBy === "store") {
-        const aStore = a.storeName || "No store";
-        const bStore = b.storeName || "No store";
-        if (aStore !== bStore) return aStore.localeCompare(bStore);
-        return a.ingredientName.localeCompare(b.ingredientName);
-      } else {
-        // Default: sort by department
-        const aDeptOrder = getDepartmentSortIndex(a.department);
-        const bDeptOrder = getDepartmentSortIndex(b.department);
-        if (aDeptOrder !== bDeptOrder) return aDeptOrder - bDeptOrder;
-        return a.ingredientName.localeCompare(b.ingredientName);
+    // First, group by store
+    const byStore = new Map<string, GroceryItemDraft[]>();
+    items.forEach((item) => {
+      const store = item.storeName || "No Store Assigned";
+      if (!byStore.has(store)) {
+        byStore.set(store, []);
       }
+      byStore.get(store)!.push(item);
     });
 
-    return items;
-  }, [wizard.groceryItems, sortBy]);
+    // Then, within each store, group by department
+    const result = new Map<string, Map<string, GroceryItemDraft[]>>();
+    byStore.forEach((storeItems, store) => {
+      const byDept = new Map<string, GroceryItemDraft[]>();
+      storeItems.forEach((item) => {
+        const dept = item.department || "Other";
+        if (!byDept.has(dept)) {
+          byDept.set(dept, []);
+        }
+        byDept.get(dept)!.push(item);
+      });
+
+      // Sort items within each department by name
+      byDept.forEach((deptItems) => {
+        deptItems.sort((a, b) => a.ingredientName.localeCompare(b.ingredientName));
+      });
+
+      // Sort departments by predefined order
+      const sortedDepts = Array.from(byDept.entries()).sort((a, b) => {
+        return getDepartmentSortIndex(a[0]) - getDepartmentSortIndex(b[0]);
+      });
+
+      result.set(store, new Map(sortedDepts));
+    });
+
+    // Sort stores (No Store Assigned last)
+    const sortedStores = Array.from(result.entries()).sort((a, b) => {
+      if (a[0] === "No Store Assigned") return 1;
+      if (b[0] === "No Store Assigned") return -1;
+      return a[0].localeCompare(b[0]);
+    });
+
+    return new Map(sortedStores);
+  }, [wizard.groceryItems]);
 
   // Handle store change
   const handleStoreChange = (itemId: string, storeId: string) => {
@@ -163,6 +188,7 @@ export default function GroceriesPage() {
       unit: "",
       recipeBreakdown: [],
       isManualAdd: true,
+      isStaple: false,
       checked: false,
     });
 
@@ -285,11 +311,11 @@ export default function GroceriesPage() {
         </div>
         <h1 className="text-2xl font-bold text-gray-900">Grocery List</h1>
         <p className="text-gray-600 mt-1">
-          Step 4 of 4: Review your shopping list and finalize your plan
+          Step 5 of 5: Review your shopping list and finalize your plan
         </p>
       </div>
 
-      {/* Progress indicator */}
+      {/* Progress indicator - 5 steps */}
       <div className="flex items-center gap-2 mb-6">
         <div className="flex items-center">
           <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center text-sm font-medium">
@@ -327,12 +353,25 @@ export default function GroceriesPage() {
               />
             </svg>
           </div>
+          <span className="ml-2 text-sm text-emerald-600">Staples</span>
+        </div>
+        <div className="flex-1 h-0.5 bg-emerald-600 mx-2"></div>
+        <div className="flex items-center">
+          <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center text-sm font-medium">
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path
+                fillRule="evenodd"
+                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </div>
           <span className="ml-2 text-sm text-emerald-600">Events</span>
         </div>
         <div className="flex-1 h-0.5 bg-emerald-600 mx-2"></div>
         <div className="flex items-center">
           <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center text-sm font-medium">
-            4
+            5
           </div>
           <span className="ml-2 text-sm font-medium text-gray-900">Groceries</span>
         </div>
@@ -438,273 +477,207 @@ export default function GroceriesPage() {
         </div>
       </div>
 
-      {/* Grocery items table */}
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        {/* Sort controls */}
-        <div className="px-4 py-3 bg-gray-50 border-b flex items-center justify-between">
-          <span className="text-sm font-medium text-gray-700">Sort by:</span>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setSortBy("department")}
-              className={`px-3 py-2 md:py-1 text-xs rounded-full transition-colors min-h-[36px] md:min-h-0 ${
-                sortBy === "department"
-                  ? "bg-emerald-100 text-emerald-800"
-                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-              }`}
-            >
-              Department
-            </button>
-            <button
-              onClick={() => setSortBy("ingredient")}
-              className={`px-3 py-2 md:py-1 text-xs rounded-full transition-colors min-h-[36px] md:min-h-0 ${
-                sortBy === "ingredient"
-                  ? "bg-emerald-100 text-emerald-800"
-                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-              }`}
-            >
-              Ingredient
-            </button>
-            <button
-              onClick={() => setSortBy("store")}
-              className={`px-3 py-2 md:py-1 text-xs rounded-full transition-colors min-h-[36px] md:min-h-0 ${
-                sortBy === "store"
-                  ? "bg-emerald-100 text-emerald-800"
-                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-              }`}
-            >
-              Store
-            </button>
-          </div>
-        </div>
+      {/* Grocery items grouped by store and department */}
+      <div className="space-y-4">
+        {Array.from(groceryItemsByStoreAndDept.entries()).map(([store, deptMap]) => {
+          const allStoreItems = Array.from(deptMap.values()).flat();
 
-        {/* Mobile card layout */}
-        <div className="md:hidden p-3 space-y-3">
-          {sortedItems.map((item) => (
-            <div key={item.id} className="bg-white border rounded-xl p-4">
-              <div className="flex items-start gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-gray-900">
-                    {item.ingredientName}
-                    {item.isManualAdd && (
-                      <span className="ml-2 text-xs px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded">
-                        Added
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-sm text-gray-600 mt-1">
-                    {item.totalQuantity}
-                    {item.unit ? ` ${item.unit}` : ""} &bull; {item.department || "Other"}
-                  </div>
-                  {item.recipeBreakdown.length > 0 && (
-                    <div className="text-xs text-gray-500 mt-1">
-                      For: {item.recipeBreakdown.map(b => b.recipeName).join(", ")}
-                    </div>
-                  )}
-                  {stores.length > 0 && (
-                    <div className="mt-3">
-                      <select
-                        value={item.storeId || ""}
-                        onChange={(e) => handleStoreChange(item.id, e.target.value)}
-                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white min-h-[44px]"
-                      >
-                        <option value="">No store</option>
-                        {stores.map((store) => (
-                          <option key={store.id} value={store.id}>
-                            {store.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                </div>
-                <button
-                  onClick={() => wizard.removeGroceryItem(item.id)}
-                  className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                  title="Remove item"
-                >
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
+          return (
+            <div key={store} className="bg-white rounded-xl shadow-sm">
+              {/* Store Header - Sticky */}
+              <div className="px-4 py-3 border-b border-l-4 border-l-sky-500 flex items-center justify-between bg-sky-100 sticky top-0 z-20 rounded-t-xl">
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                   </svg>
-                </button>
+                  <h3 className="font-semibold text-sky-900">{store}</h3>
+                </div>
+                <span className="text-sm font-medium text-sky-700">
+                  {allStoreItems.length} {allStoreItems.length === 1 ? "item" : "items"}
+                </span>
               </div>
-            </div>
-          ))}
-        </div>
 
-        {/* Desktop table */}
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b bg-gray-50">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Ingredient
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Amount
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Recipes
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Department
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Store
-                </th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider w-16">
+              {/* Departments within Store */}
+              {Array.from(deptMap.entries()).map(([dept, items]) => (
+                <div key={dept}>
+                  {/* Department Header - Sticky below store header */}
+                  <div className="px-4 py-2 border-b border-l-4 border-l-amber-400 flex items-center justify-between bg-amber-50 sticky top-[48px] z-10">
+                    <span className="text-sm font-medium text-gray-700">{dept}</span>
+                    <span className="text-xs font-medium text-gray-500">{items.length}</span>
+                  </div>
 
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {sortedItems.map((item) => {
-                const isEditing = editingItem?.id === item.id;
-
-                return (
-                  <tr key={item.id} className="hover:bg-gray-50">
-                    {/* Ingredient name */}
-                    <td className="px-4 py-3">
-                      {isEditing && editingItem.field === "name" ? (
-                        <input
-                          type="text"
-                          value={editingItem.value}
-                          onChange={(e) =>
-                            setEditingItem({
-                              ...editingItem,
-                              value: e.target.value,
-                            })
-                          }
-                          onBlur={handleEditSave}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") handleEditSave();
-                            if (e.key === "Escape") handleEditCancel();
-                          }}
-                          autoFocus
-                          className="px-2 py-1 border border-emerald-500 rounded text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent w-full"
-                        />
-                      ) : (
-                        <span
-                          className="font-medium text-gray-900 cursor-pointer hover:text-emerald-600"
-                          onClick={() => handleEdit(item, "name")}
-                        >
-                          {item.ingredientName}
-                          {item.isManualAdd && (
-                            <span className="ml-2 text-xs px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded">
-                              Added
-                            </span>
-                          )}
-                        </span>
-                      )}
-                    </td>
-
-                    {/* Amount */}
-                    <td className="px-4 py-3">
-                      {isEditing && editingItem.field === "quantity" ? (
-                        <input
-                          type="text"
-                          value={editingItem.value}
-                          onChange={(e) =>
-                            setEditingItem({
-                              ...editingItem,
-                              value: e.target.value,
-                            })
-                          }
-                          onBlur={handleEditSave}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") handleEditSave();
-                            if (e.key === "Escape") handleEditCancel();
-                          }}
-                          autoFocus
-                          className="w-20 px-2 py-1 border border-emerald-500 rounded text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                        />
-                      ) : (
-                        <span
-                          className="text-sm text-gray-700 cursor-pointer hover:text-emerald-600"
-                          onClick={() => handleEdit(item, "quantity")}
-                        >
-                          {item.totalQuantity}
-                          {item.unit ? ` ${item.unit}` : ""}
-                        </span>
-                      )}
-                    </td>
-
-                    {/* Recipes */}
-                    <td className="px-4 py-3">
-                      <div className="text-sm text-gray-600">
-                        {item.recipeBreakdown.length > 0 ? (
-                          item.recipeBreakdown.map((breakdown, idx) => (
-                            <span key={idx}>
-                              {idx > 0 && ", "}
-                              {breakdown.recipeName}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
+                  {/* Mobile card layout */}
+                  <div className="md:hidden divide-y divide-gray-100">
+                    {items.map((item) => (
+                      <div key={item.id} className="p-4">
+                        <div className="flex items-start gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-gray-900">
+                              {item.ingredientName}
+                              {item.isStaple && (
+                                <span className="ml-2 text-xs px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded">
+                                  Staple
+                                </span>
+                              )}
+                              {item.isManualAdd && (
+                                <span className="ml-2 text-xs px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded">
+                                  Added
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-sm text-gray-600 mt-1">
+                              {item.totalQuantity}
+                              {item.unit ? ` ${item.unit}` : ""}
+                            </div>
+                            {item.recipeBreakdown.length > 0 && (
+                              <div className="text-xs text-gray-500 mt-1">
+                                For: {item.recipeBreakdown.map(b => b.recipeName).join(", ")}
+                              </div>
+                            )}
+                            {stores.length > 0 && (
+                              <div className="mt-3">
+                                <select
+                                  value={item.storeId || ""}
+                                  onChange={(e) => handleStoreChange(item.id, e.target.value)}
+                                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white min-h-[44px]"
+                                >
+                                  <option value="">No store</option>
+                                  {stores.map((s) => (
+                                    <option key={s.id} value={s.id}>{s.name}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => wizard.removeGroceryItem(item.id)}
+                            className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Remove item"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
                       </div>
-                    </td>
+                    ))}
+                  </div>
 
-                    {/* Department */}
-                    <td className="px-4 py-3">
-                      <span className="text-sm text-gray-600">
-                        {item.department || "Other"}
-                      </span>
-                    </td>
+                  {/* Desktop table rows */}
+                  <div className="hidden md:block">
+                    <table className="w-full">
+                      <tbody className="divide-y divide-gray-100">
+                        {items.map((item) => {
+                          const isEditing = editingItem?.id === item.id;
 
-                    {/* Store */}
-                    <td className="px-4 py-3">
-                      <select
-                        value={item.storeId || ""}
-                        onChange={(e) => handleStoreChange(item.id, e.target.value)}
-                        className="text-sm border border-gray-200 rounded px-2 py-1 focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
-                      >
-                        <option value="">No store</option>
-                        {stores.map((store) => (
-                          <option key={store.id} value={store.id}>
-                            {store.name}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
+                          return (
+                            <tr key={item.id} className="hover:bg-gray-50">
+                              {/* Ingredient name */}
+                              <td className="px-4 py-3 w-1/4">
+                                {isEditing && editingItem.field === "name" ? (
+                                  <input
+                                    type="text"
+                                    value={editingItem.value}
+                                    onChange={(e) => setEditingItem({ ...editingItem, value: e.target.value })}
+                                    onBlur={handleEditSave}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") handleEditSave();
+                                      if (e.key === "Escape") handleEditCancel();
+                                    }}
+                                    autoFocus
+                                    className="px-2 py-1 border border-emerald-500 rounded text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent w-full"
+                                  />
+                                ) : (
+                                  <span
+                                    className="font-medium text-gray-900 cursor-pointer hover:text-emerald-600"
+                                    onClick={() => handleEdit(item, "name")}
+                                  >
+                                    {item.ingredientName}
+                                    {item.isStaple && (
+                                      <span className="ml-2 text-xs px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded">Staple</span>
+                                    )}
+                                    {item.isManualAdd && (
+                                      <span className="ml-2 text-xs px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded">Added</span>
+                                    )}
+                                  </span>
+                                )}
+                              </td>
 
-                    {/* Remove */}
-                    <td className="px-4 py-3 text-center">
-                      <button
-                        onClick={() => wizard.removeGroceryItem(item.id)}
-                        className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                        title="Remove item"
-                      >
-                        <svg
-                          className="w-4 h-4"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M6 18L18 6M6 6l12 12"
-                          />
-                        </svg>
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                              {/* Amount */}
+                              <td className="px-4 py-3 w-24">
+                                {isEditing && editingItem.field === "quantity" ? (
+                                  <input
+                                    type="text"
+                                    value={editingItem.value}
+                                    onChange={(e) => setEditingItem({ ...editingItem, value: e.target.value })}
+                                    onBlur={handleEditSave}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") handleEditSave();
+                                      if (e.key === "Escape") handleEditCancel();
+                                    }}
+                                    autoFocus
+                                    className="w-20 px-2 py-1 border border-emerald-500 rounded text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                  />
+                                ) : (
+                                  <span
+                                    className="text-sm text-gray-700 cursor-pointer hover:text-emerald-600"
+                                    onClick={() => handleEdit(item, "quantity")}
+                                  >
+                                    {item.totalQuantity}{item.unit ? ` ${item.unit}` : ""}
+                                  </span>
+                                )}
+                              </td>
+
+                              {/* Recipes */}
+                              <td className="px-4 py-3">
+                                <div className="text-sm text-gray-600">
+                                  {item.recipeBreakdown.length > 0 ? (
+                                    item.recipeBreakdown.map((breakdown, idx) => (
+                                      <span key={idx}>{idx > 0 && ", "}{breakdown.recipeName}</span>
+                                    ))
+                                  ) : (
+                                    <span className="text-gray-400">-</span>
+                                  )}
+                                </div>
+                              </td>
+
+                              {/* Store */}
+                              <td className="px-4 py-3 w-40">
+                                <select
+                                  value={item.storeId || ""}
+                                  onChange={(e) => handleStoreChange(item.id, e.target.value)}
+                                  className="text-sm border border-gray-200 rounded px-2 py-1 focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
+                                >
+                                  <option value="">No store</option>
+                                  {stores.map((s) => (
+                                    <option key={s.id} value={s.id}>{s.name}</option>
+                                  ))}
+                                </select>
+                              </td>
+
+                              {/* Remove */}
+                              <td className="px-4 py-3 text-center w-16">
+                                <button
+                                  onClick={() => wizard.removeGroceryItem(item.id)}
+                                  className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                                  title="Remove item"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })}
       </div>
 
       {/* Empty state */}

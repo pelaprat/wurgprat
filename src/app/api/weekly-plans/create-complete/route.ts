@@ -35,6 +35,7 @@ interface GroceryItemDraft {
   unit: string;
   recipeBreakdown: RecipeBreakdown[];
   isManualAdd: boolean;
+  isStaple: boolean;
   checked: boolean;
 }
 
@@ -322,6 +323,7 @@ export async function POST(request: NextRequest) {
             quantity,
             unit: item.unit || null,
             checked: false,
+            is_staple: item.isStaple || false,
             added_by: user.id,
           });
         }
