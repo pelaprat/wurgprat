@@ -219,12 +219,20 @@ export async function POST(request: NextRequest) {
     })
     .join("\n");
 
+  // Calculate meal count - at least 7 (one per day), but more if user selected more recipes
+  const mealCount = Math.max(7, selectedRecipeIds.length);
+  const hasMultipleMealsPerDay = mealCount > 7;
+
+  console.log(`[generate] Meal count: ${mealCount}, hasMultipleMealsPerDay: ${hasMultipleMealsPerDay}`);
+
   const prompt = renderPrompt("mealPlanGeneration", {
     weekOf,
     userDescription: userDescription || "No specific preferences provided.",
     scheduleContext,
     recipeList,
     hasSelectedRecipes: selectedRecipeIds.length > 0,
+    hasMultipleMealsPerDay,
+    mealCount: mealCount.toString(),
     firstDate: weekDates[0],
     secondDate: weekDates[1],
   });
@@ -269,6 +277,7 @@ export async function POST(request: NextRequest) {
         recipeId: string;
         recipeName: string;
         reasoning: string;
+        sortOrder?: number;
       }, index: number) => {
         // CRITICAL: Validate that the recipe ID exists in our household's recipes
         let recipeId = meal.recipeId;
@@ -324,7 +333,7 @@ export async function POST(request: NextRequest) {
           recipeTimeRating: recipe?.time_rating,
           aiReasoning: meal.reasoning,
           isAiSuggested: !wasUserSelected,
-          sortOrder: 0, // First meal of the day
+          sortOrder: meal.sortOrder ?? 0, // Use AI's sortOrder or default to 0
         };
       }
     );

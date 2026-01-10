@@ -617,7 +617,7 @@ export default function ReviewPage() {
     if (recipes.length === 0) {
       setRecipesLoading(true);
       try {
-        const response = await fetch("/api/recipes?status=made");
+        const response = await fetch("/api/recipes");
         if (response.ok) {
           const data = await response.json();
           setRecipes(data.recipes || []);
