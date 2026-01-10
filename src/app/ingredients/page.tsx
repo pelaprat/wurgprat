@@ -61,6 +61,13 @@ export default function IngredientsPage() {
   const [selectedForMerge, setSelectedForMerge] = useState<Set<string>>(new Set());
   const [isMergingManual, setIsMergingManual] = useState(false);
 
+  // Add ingredient state
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newIngredientName, setNewIngredientName] = useState("");
+  const [newIngredientDepartment, setNewIngredientDepartment] = useState("");
+  const [isAddingIngredient, setIsAddingIngredient] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+
   // Stores state
   const [stores, setStores] = useState<Store[]>([]);
 
@@ -363,6 +370,48 @@ export default function IngredientsPage() {
     setSelectedForMerge(new Set());
   };
 
+  const handleAddIngredient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newIngredientName.trim()) return;
+
+    setIsAddingIngredient(true);
+    setAddError(null);
+
+    try {
+      const response = await fetch("/api/ingredients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newIngredientName.trim(),
+          department: newIngredientDepartment || null,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setIngredients((prev) => [...prev, data.ingredient]);
+        setShowAddModal(false);
+        setNewIngredientName("");
+        setNewIngredientDepartment("");
+      } else {
+        const error = await response.json();
+        setAddError(error.error || "Failed to add ingredient");
+      }
+    } catch (error) {
+      console.error("Failed to add ingredient:", error);
+      setAddError("Failed to add ingredient");
+    } finally {
+      setIsAddingIngredient(false);
+    }
+  };
+
+  const closeAddModal = () => {
+    setShowAddModal(false);
+    setNewIngredientName("");
+    setNewIngredientDepartment("");
+    setAddError(null);
+  };
+
   const SortIcon = ({ field }: { field: SortField }) => {
     if (sortField !== field) {
       return <span className="text-gray-300 ml-1">&#8597;</span>;
@@ -408,6 +457,15 @@ export default function IngredientsPage() {
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Ingredients</h1>
         <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4">
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="px-4 py-2.5 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center font-medium"
+          >
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            <span className="hidden sm:inline">Add </span>Ingredient
+          </button>
           <button
             onClick={handleFindDuplicates}
             className="px-4 py-2.5 text-sm bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors flex items-center font-medium"
@@ -718,6 +776,87 @@ export default function IngredientsPage() {
             </table>
           </div>
         </>
+      )}
+
+      {/* Add Ingredient Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+            {/* Modal Header */}
+            <div className="p-4 border-b flex justify-between items-center">
+              <h2 className="text-xl font-bold text-gray-900">Add Ingredient</h2>
+              <button
+                onClick={closeAddModal}
+                className="p-1 text-gray-500 hover:text-gray-700"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <form onSubmit={handleAddIngredient} className="p-4">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Ingredient Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={newIngredientName}
+                    onChange={(e) => setNewIngredientName(e.target.value)}
+                    placeholder="e.g., Chicken breast"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    autoFocus
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Department
+                  </label>
+                  <select
+                    value={newIngredientDepartment}
+                    onChange={(e) => setNewIngredientDepartment(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  >
+                    <option value="">Select department...</option>
+                    {departmentsList.map((dept) => (
+                      <option key={dept.id} value={dept.name}>
+                        {dept.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {addError && (
+                  <div className="p-3 rounded-lg bg-red-50 text-red-700 border border-red-200 text-sm">
+                    {addError}
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={closeAddModal}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isAddingIngredient || !newIngredientName.trim()}
+                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors font-medium"
+                >
+                  {isAddingIngredient ? "Adding..." : "Add Ingredient"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* De-duplication Modal */}
