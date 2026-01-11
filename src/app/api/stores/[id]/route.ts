@@ -121,7 +121,7 @@ export async function PATCH(
 
   // Only update provided fields
   const updateData: Record<string, unknown> = {};
-  const allowedFields = ["name", "sort_order"];
+  const allowedFields = ["name", "sort_order", "department_order"];
 
   for (const field of allowedFields) {
     if (body[field] !== undefined) {

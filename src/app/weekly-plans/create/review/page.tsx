@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -18,10 +18,49 @@ import {
   useDraggable,
 } from "@dnd-kit/core";
 import { useMealPlanWizard, ProposedMeal } from "@/contexts/MealPlanWizardContext";
-import { Event } from "@/contexts/EventsContext";
-import { formatDateLocal } from "@/utils/dates";
+import { useEvents, Event } from "@/contexts/EventsContext";
+import { formatDateLocal, getSaturdayOptions, getWeekDates as getWeekDatesUtil } from "@/utils/dates";
 import { DAY_NAMES } from "@/constants/calendar";
 import { TIME_RATING_LABELS, TIME_RATING_COLORS } from "@/constants/recipes";
+import WizardProgress from "@/components/WizardProgress";
+
+const WIZARD_STEPS = [
+  { id: "review", label: "Meals", href: "/weekly-plans/create/review" },
+  { id: "staples", label: "Staples", href: "/weekly-plans/create/staples" },
+  { id: "events", label: "Events", href: "/weekly-plans/create/events" },
+  { id: "groceries", label: "Groceries", href: "/weekly-plans/create/groceries" },
+];
+
+interface ExistingPlan {
+  id: string;
+  week_of: string;
+}
+
+// Filter events for a specific week
+function getEventsForWeek(events: Event[], weekOf: string): Event[] {
+  const weekDates = getWeekDatesUtil(weekOf);
+  const startOfWeek = weekDates[0];
+  const endOfWeek = new Date(weekDates[6]);
+  endOfWeek.setHours(23, 59, 59, 999);
+
+  return events.filter((event) => {
+    const eventDate = new Date(event.start_time);
+    return eventDate >= startOfWeek && eventDate <= endOfWeek;
+  });
+}
+
+// Format Saturday option for display
+function formatSaturdayOption(dateStr: string, existingPlans: ExistingPlan[]): string {
+  const date = new Date(dateStr + "T00:00:00");
+  const endDate = new Date(date);
+  endDate.setDate(date.getDate() + 6);
+
+  const hasPlan = existingPlans.some(p => p.week_of === dateStr);
+
+  const label = `${date.toLocaleDateString("en-US", { month: "short", day: "numeric" })} - ${endDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+
+  return hasPlan ? `${label} (Plan exists)` : label;
+}
 
 interface HouseholdMember {
   id: string;
@@ -282,11 +321,15 @@ interface DaySlotProps {
   onAssign: (mealId: string, userId: string | undefined) => void;
   onMove: (meal: ProposedMeal) => void;
   onPickRecipe: (mealId: string) => void;
-  onAddMeal: (day: number, date: string) => void;
+  onAddMealWithAI: (day: number, date: string) => void;
+  onAddRecipe: (day: number, date: string, recipe: Recipe) => void;
   replacingMealId: string | null;
   isDraggedOver: boolean;
   householdMembers: HouseholdMember[];
   isMobile: boolean;
+  isAddingMeal: boolean;
+  recipes: Recipe[];
+  usedRecipeIds: string[];
 }
 
 function DaySlot({
@@ -299,20 +342,32 @@ function DaySlot({
   onAssign,
   onMove,
   onPickRecipe,
-  onAddMeal,
+  onAddMealWithAI,
+  onAddRecipe,
   replacingMealId,
   isDraggedOver,
   householdMembers,
   isMobile,
+  isAddingMeal,
+  recipes,
+  usedRecipeIds,
 }: DaySlotProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: `day-${day}`,
     data: { day },
   });
+  const [recipeSearch, setRecipeSearch] = useState("");
 
   const dayName = DAY_NAMES[day - 1];
   const isBusy = events.length > 0;
   const isHighlighted = isOver || isDraggedOver;
+
+  // Filter recipes based on search
+  const filteredRecipes = recipeSearch.trim()
+    ? recipes.filter((recipe) =>
+        recipe.name.toLowerCase().includes(recipeSearch.toLowerCase())
+      ).slice(0, 5)
+    : [];
 
   return (
     <div
@@ -391,23 +446,132 @@ function DaySlot({
                 isMobile={isMobile}
               />
             ))}
+            {/* Add another meal - inline search */}
+            <div className="border-2 border-dashed border-gray-200 rounded-lg p-2">
+              <div className="relative">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  placeholder="Add another dinner..."
+                  value={recipeSearch}
+                  onChange={(e) => setRecipeSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                />
+              </div>
+              {filteredRecipes.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {filteredRecipes.map((recipe) => {
+                    const isUsed = usedRecipeIds.includes(recipe.id);
+                    const timeRating = recipe.time_rating
+                      ? { label: TIME_RATING_LABELS[recipe.time_rating], color: TIME_RATING_COLORS[recipe.time_rating] }
+                      : null;
+                    return (
+                      <button
+                        key={recipe.id}
+                        onClick={() => {
+                          onAddRecipe(day, date, recipe);
+                          setRecipeSearch("");
+                        }}
+                        disabled={isUsed}
+                        className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center justify-between ${
+                          isUsed
+                            ? "bg-gray-50 text-gray-400 cursor-not-allowed"
+                            : "hover:bg-emerald-50 text-gray-900"
+                        }`}
+                      >
+                        <span className="truncate">{recipe.name}</span>
+                        <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                          {timeRating && (
+                            <span className={`text-xs px-1.5 py-0.5 rounded ${timeRating.color}`}>
+                              {timeRating.label}
+                            </span>
+                          )}
+                          {isUsed && (
+                            <span className="text-xs text-gray-400">In use</span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </>
         ) : (
-          <div className="p-3 border-2 border-dashed border-gray-200 rounded-lg text-center text-gray-400">
-            No meal planned
+          /* Empty state - inline recipe search */
+          <div className="border-2 border-dashed border-gray-200 rounded-lg p-3">
+            {/* Search input */}
+            <div className="relative">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search recipes..."
+                value={recipeSearch}
+                onChange={(e) => setRecipeSearch(e.target.value)}
+                className="w-full pl-9 pr-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+              />
+            </div>
+
+            {/* Recipe results */}
+            {filteredRecipes.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {filteredRecipes.map((recipe) => {
+                  const isUsed = usedRecipeIds.includes(recipe.id);
+                  const timeRating = recipe.time_rating
+                    ? { label: TIME_RATING_LABELS[recipe.time_rating], color: TIME_RATING_COLORS[recipe.time_rating] }
+                    : null;
+                  return (
+                    <button
+                      key={recipe.id}
+                      onClick={() => {
+                        onAddRecipe(day, date, recipe);
+                        setRecipeSearch("");
+                      }}
+                      disabled={isUsed}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center justify-between ${
+                        isUsed
+                          ? "bg-gray-50 text-gray-400 cursor-not-allowed"
+                          : "hover:bg-emerald-50 text-gray-900"
+                      }`}
+                    >
+                      <span className="truncate">{recipe.name}</span>
+                      <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                        {timeRating && (
+                          <span className={`text-xs px-1.5 py-0.5 rounded ${timeRating.color}`}>
+                            {timeRating.label}
+                          </span>
+                        )}
+                        {isUsed && (
+                          <span className="text-xs text-gray-400">In use</span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* AI suggestion button */}
+            <button
+              onClick={() => onAddMealWithAI(day, date)}
+              disabled={isAddingMeal}
+              className="w-full mt-2 py-2.5 px-3 bg-purple-50 border border-purple-200 rounded-lg text-sm text-purple-700 hover:bg-purple-100 transition-colors flex items-center justify-center gap-1.5 min-h-[44px] disabled:opacity-50"
+            >
+              {isAddingMeal ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600"></div>
+              ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              )}
+              AI suggestion
+            </button>
           </div>
         )}
-
-        {/* Add another meal button */}
-        <button
-          onClick={() => onAddMeal(day, date)}
-          className="w-full py-2 border-2 border-dashed border-gray-200 rounded-lg text-sm text-gray-500 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50/50 transition-colors flex items-center justify-center gap-1"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Add another dinner
-        </button>
       </div>
     </div>
   );
@@ -417,6 +581,7 @@ export default function ReviewPage() {
   const { data: session } = useSession();
   const router = useRouter();
   const wizard = useMealPlanWizard();
+  const { events: allEvents } = useEvents();
   const isMobile = useIsMobile();
 
   const [replacingMealId, setReplacingMealId] = useState<string | null>(null);
@@ -427,8 +592,45 @@ export default function ReviewPage() {
   const [movingMeal, setMovingMeal] = useState<ProposedMeal | null>(null);
   const [pickingRecipeForMealId, setPickingRecipeForMealId] = useState<string | null>(null);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
-  const [recipesLoading, setRecipesLoading] = useState(false);
   const [recipeSearch, setRecipeSearch] = useState("");
+  const [existingPlans, setExistingPlans] = useState<ExistingPlan[]>([]);
+
+  // Saturday options for dropdown
+  const saturdayOptions = useMemo(() => getSaturdayOptions(), []);
+
+  // Get used recipe IDs to show which are already planned
+  const usedRecipeIds = useMemo(() => {
+    return wizard.proposedMeals
+      .filter((m) => m.recipeId)
+      .map((m) => m.recipeId as string);
+  }, [wizard.proposedMeals]);
+
+  // Check if selected week already has a plan
+  const selectedWeekHasPlan = existingPlans.some(p => p.week_of === wizard.weekOf);
+
+  // Fetch existing plans
+  useEffect(() => {
+    const fetchExistingPlans = async () => {
+      try {
+        const response = await fetch("/api/weekly-plans");
+        if (response.ok) {
+          const data = await response.json();
+          setExistingPlans(data.weeklyPlans || []);
+        }
+      } catch (error) {
+        console.error("Failed to fetch existing plans:", error);
+      }
+    };
+    if (session) {
+      fetchExistingPlans();
+    }
+  }, [session]);
+
+  // Update week events when weekOf changes
+  useEffect(() => {
+    const weekEvents = getEventsForWeek(allEvents, wizard.weekOf);
+    wizard.setWeekEvents(weekEvents);
+  }, [allEvents, wizard.weekOf]);
 
   // Fetch household members
   useEffect(() => {
@@ -446,6 +648,24 @@ export default function ReviewPage() {
     fetchMembers();
   }, []);
 
+  // Fetch recipes on page load for inline search
+  useEffect(() => {
+    const fetchRecipes = async () => {
+      try {
+        const response = await fetch("/api/recipes");
+        if (response.ok) {
+          const data = await response.json();
+          setRecipes(data.recipes || []);
+        }
+      } catch (err) {
+        console.error("Failed to fetch recipes:", err);
+      }
+    };
+    if (session) {
+      fetchRecipes();
+    }
+  }, [session]);
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -454,13 +674,6 @@ export default function ReviewPage() {
     }),
     useSensor(KeyboardSensor)
   );
-
-  // Redirect if no meals proposed yet
-  useEffect(() => {
-    if (!wizard.proposedMeals || wizard.proposedMeals.length === 0) {
-      router.replace("/weekly-plans/create/input");
-    }
-  }, [wizard.proposedMeals, router]);
 
   // Get events for each day
   const getEventsForDay = (date: string): Event[] => {
@@ -608,29 +821,13 @@ export default function ReviewPage() {
     setMovingMeal(null);
   };
 
-  // Handle opening recipe picker
+  // Handle opening recipe picker for replacing an existing meal
   const handleOpenRecipePicker = async (mealId: string) => {
     setPickingRecipeForMealId(mealId);
     setRecipeSearch("");
-
-    // Fetch recipes if not already loaded
-    if (recipes.length === 0) {
-      setRecipesLoading(true);
-      try {
-        const response = await fetch("/api/recipes");
-        if (response.ok) {
-          const data = await response.json();
-          setRecipes(data.recipes || []);
-        }
-      } catch (err) {
-        console.error("Failed to fetch recipes:", err);
-      } finally {
-        setRecipesLoading(false);
-      }
-    }
   };
 
-  // Handle selecting a recipe from the picker
+  // Handle selecting a recipe from the picker (for replacing existing meal)
   const handleSelectRecipe = (recipe: Recipe) => {
     if (!pickingRecipeForMealId) return;
     wizard.updateMealById(pickingRecipeForMealId, {
@@ -641,6 +838,16 @@ export default function ReviewPage() {
       isAiSuggested: false,
     });
     setPickingRecipeForMealId(null);
+  };
+
+  // Handle adding a recipe directly to a day (from inline search)
+  const handleAddRecipe = (day: number, date: string, recipe: Recipe) => {
+    wizard.addMealToDay(day, date, {
+      recipeId: recipe.id,
+      recipeName: recipe.name,
+      recipeTimeRating: recipe.time_rating ?? undefined,
+      isAiSuggested: false,
+    });
   };
 
   // Filter recipes based on search
@@ -693,8 +900,16 @@ export default function ReviewPage() {
   const unassignedMeals = wizard.proposedMeals.filter((m) => !m.assignedUserId);
   const allMealsAssigned = unassignedMeals.length === 0;
 
-  // Handle continue - now goes to event assignment if there are events, otherwise groceries
+  // Handle continue - now goes to staples step
   const handleContinue = () => {
+    if (selectedWeekHasPlan) {
+      setError("A plan already exists for this week. Please select a different week.");
+      return;
+    }
+    if (wizard.proposedMeals.length === 0) {
+      setError("Please add at least one meal before continuing.");
+      return;
+    }
     if (!allMealsAssigned) {
       setError(`Please assign a cook to all ${unassignedMeals.length} unassigned meal(s) before continuing.`);
       return;
@@ -712,14 +927,6 @@ export default function ReviewPage() {
     );
   }
 
-  if (!wizard.proposedMeals || wizard.proposedMeals.length === 0) {
-    return (
-      <div className="flex justify-center items-center min-h-[40vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
-      </div>
-    );
-  }
-
   const weekDates = getWeekDates();
   const activeMeal = activeDragMealId
     ? wizard.proposedMeals.find((m) => m.mealId === activeDragMealId)
@@ -727,6 +934,42 @@ export default function ReviewPage() {
 
   return (
     <div className="max-w-4xl mx-auto">
+      {/* Restore Session Modal */}
+      {wizard.showRestoreModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Resume Previous Plan?</h3>
+                <p className="text-sm text-gray-500">You have an unfinished meal plan</p>
+              </div>
+            </div>
+            <p className="text-gray-600 mb-6">
+              We found a meal plan you were working on. Would you like to continue where you left off?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={wizard.discardSavedSession}
+                className="flex-1 px-4 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors min-h-[44px]"
+              >
+                Start Fresh
+              </button>
+              <button
+                onClick={wizard.restoreSession}
+                className="flex-1 px-4 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors min-h-[44px]"
+              >
+                Resume Plan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="mb-6">
         <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
@@ -737,63 +980,69 @@ export default function ReviewPage() {
             Weekly Plans
           </Link>
           <span>/</span>
-          <Link
-            href="/weekly-plans/create/input"
-            className="hover:text-emerald-600 transition-colors"
-          >
-            Create
-          </Link>
-          <span>/</span>
-          <span className="text-gray-900">Review</span>
+          <span className="text-gray-900">Create New Plan</span>
         </div>
-        <h1 className="text-2xl font-bold text-gray-900">Review Meal Plan</h1>
-        <p className="text-gray-600 mt-1">
-          Step 2 of 5: Review meals and assign who&apos;s cooking
+        <h1 className="text-2xl font-bold text-gray-900 mb-4">Create Weekly Meal Plan</h1>
+        <WizardProgress steps={WIZARD_STEPS} currentStep="review" />
+        <p className="text-gray-600">
+          Plan meals and assign who&apos;s cooking
         </p>
       </div>
 
-      {/* Progress indicator - 5 steps */}
+      {/* Progress indicator - 4 steps */}
       <div className="flex items-center gap-2 mb-6">
         <div className="flex items-center">
           <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center text-sm font-medium">
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-              <path
-                fillRule="evenodd"
-                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                clipRule="evenodd"
-              />
-            </svg>
-          </div>
-          <span className="ml-2 text-sm text-emerald-600">Start</span>
-        </div>
-        <div className="flex-1 h-0.5 bg-emerald-600 mx-2"></div>
-        <div className="flex items-center">
-          <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center text-sm font-medium">
-            2
+            1
           </div>
           <span className="ml-2 text-sm font-medium text-gray-900">Meals</span>
         </div>
         <div className="flex-1 h-0.5 bg-gray-200 mx-2"></div>
         <div className="flex items-center">
           <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-sm font-medium">
-            3
+            2
           </div>
           <span className="ml-2 text-sm text-gray-500">Staples</span>
         </div>
         <div className="flex-1 h-0.5 bg-gray-200 mx-2"></div>
         <div className="flex items-center">
           <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-sm font-medium">
-            4
+            3
           </div>
           <span className="ml-2 text-sm text-gray-500">Events</span>
         </div>
         <div className="flex-1 h-0.5 bg-gray-200 mx-2"></div>
         <div className="flex items-center">
           <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-sm font-medium">
-            5
+            4
           </div>
           <span className="ml-2 text-sm text-gray-500">Groceries</span>
         </div>
+      </div>
+
+      {/* Week selector */}
+      <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Select Week
+        </label>
+        <select
+          value={wizard.weekOf}
+          onChange={(e) => wizard.setWeekOf(e.target.value)}
+          className={`px-4 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent ${
+            selectedWeekHasPlan ? "border-amber-300 bg-amber-50" : "border-gray-300"
+          }`}
+        >
+          {saturdayOptions.map((saturday) => (
+            <option key={saturday} value={saturday}>
+              {formatSaturdayOption(saturday, existingPlans)}
+            </option>
+          ))}
+        </select>
+        {selectedWeekHasPlan && (
+          <p className="text-sm text-amber-600 mt-2">
+            A plan already exists for this week. Select a different week or edit the existing plan.
+          </p>
+        )}
       </div>
 
       {/* AI explanation */}
@@ -850,11 +1099,15 @@ export default function ReviewPage() {
                 onAssign={handleAssignUser}
                 onMove={handleOpenMoveModal}
                 onPickRecipe={handleOpenRecipePicker}
-                onAddMeal={handleAddMeal}
+                onAddMealWithAI={handleAddMeal}
+                onAddRecipe={handleAddRecipe}
                 replacingMealId={replacingMealId}
                 isDraggedOver={false}
                 householdMembers={householdMembers}
                 isMobile={isMobile}
+                isAddingMeal={isAddingMeal}
+                recipes={recipes}
+                usedRecipeIds={usedRecipeIds}
               />
             );
           })}
@@ -939,7 +1192,7 @@ export default function ReviewPage() {
         </div>
       )}
 
-      {/* Recipe picker modal */}
+      {/* Recipe picker modal - for replacing existing meals */}
       {pickingRecipeForMealId && (
         <div className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-in slide-in-from-bottom duration-200 md:animate-none max-h-[80vh] flex flex-col">
@@ -967,7 +1220,7 @@ export default function ReviewPage() {
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-2">
-              {recipesLoading ? (
+              {recipes.length === 0 ? (
                 <div className="flex items-center justify-center py-8">
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-600"></div>
                 </div>
@@ -1030,8 +1283,18 @@ export default function ReviewPage() {
         </div>
       )}
 
-      {/* Assignment status */}
-      {!allMealsAssigned && (
+      {/* Status messages */}
+      {wizard.proposedMeals.length === 0 && (
+        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-3">
+          <svg className="w-5 h-5 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p className="text-blue-800">
+            Search for a recipe on any day or use &quot;AI suggestion&quot; to start planning your meals.
+          </p>
+        </div>
+      )}
+      {wizard.proposedMeals.length > 0 && !allMealsAssigned && (
         <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-3">
           <svg className="w-5 h-5 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -1046,23 +1309,22 @@ export default function ReviewPage() {
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-4 pb-safe md:relative md:border-0 md:p-0 md:mt-8 z-20">
         <div className="flex justify-between items-center max-w-4xl mx-auto">
           <Link
-            href="/weekly-plans/create/input"
+            href="/weekly-plans"
             className="px-4 py-3 text-gray-600 hover:text-gray-800 transition-colors flex items-center gap-2 min-h-[44px]"
           >
-            <span>&larr;</span>
-            Back
+            Cancel
           </Link>
           <button
             onClick={handleContinue}
-            disabled={!allMealsAssigned}
+            disabled={!allMealsAssigned || wizard.proposedMeals.length === 0 || selectedWeekHasPlan}
             className={`px-6 py-3 rounded-lg transition-colors flex items-center gap-2 min-h-[44px] ${
-              allMealsAssigned
+              allMealsAssigned && wizard.proposedMeals.length > 0 && !selectedWeekHasPlan
                 ? "bg-emerald-600 text-white hover:bg-emerald-700"
                 : "bg-gray-300 text-gray-500 cursor-not-allowed"
             }`}
           >
-            {wizard.weekEvents.length > 0 ? "Continue" : "Continue"}
-            <span className={allMealsAssigned ? "text-emerald-200" : "text-gray-400"}>&rarr;</span>
+            Continue
+            <span className={allMealsAssigned && wizard.proposedMeals.length > 0 && !selectedWeekHasPlan ? "text-emerald-200" : "text-gray-400"}>&rarr;</span>
           </button>
         </div>
       </div>

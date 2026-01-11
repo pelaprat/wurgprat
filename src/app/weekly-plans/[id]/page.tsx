@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { DAY_NAMES } from "@/constants/calendar";
-import { getDepartmentSortIndex } from "@/constants/grocery";
+import { getDepartmentSortIndexForStore } from "@/constants/grocery";
 import { WeeklyPlanDetailSkeleton } from "@/components/Skeleton";
 import {
   DndContext,
@@ -92,6 +92,12 @@ interface GroceryList {
   id: string;
   notes?: string;
   grocery_items: GroceryItem[];
+}
+
+interface Store {
+  id: string;
+  name: string;
+  department_order?: string[] | null;
 }
 
 interface WeeklyPlan {
@@ -377,6 +383,7 @@ export default function WeeklyPlanDetailPage() {
   const searchParams = useSearchParams();
   const [weeklyPlan, setWeeklyPlan] = useState<WeeklyPlan | null>(null);
   const [householdMembers, setHouseholdMembers] = useState<HouseholdMember[]>([]);
+  const [stores, setStores] = useState<Store[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const tabParam = searchParams.get("tab");
@@ -432,9 +439,10 @@ export default function WeeklyPlanDetailPage() {
       if (!params.id) return;
 
       try {
-        const [planResponse, membersResponse] = await Promise.all([
+        const [planResponse, membersResponse, storesResponse] = await Promise.all([
           fetch(`/api/weekly-plans/${params.id}`),
           fetch("/api/household/members"),
+          fetch("/api/stores"),
         ]);
 
         if (planResponse.ok) {
@@ -447,6 +455,11 @@ export default function WeeklyPlanDetailPage() {
         if (membersResponse.ok) {
           const data = await membersResponse.json();
           setHouseholdMembers(data.members || []);
+        }
+
+        if (storesResponse.ok) {
+          const data = await storesResponse.json();
+          setStores(data.stores || []);
         }
       } catch {
         setError("Failed to load weekly plan");
@@ -472,7 +485,12 @@ export default function WeeklyPlanDetailPage() {
       const data = await response.json();
 
       if (response.ok) {
-        if (data.created === 0 && data.skipped > 0) {
+        if (data.failed > 0 && data.created === 0) {
+          setSyncMessage({
+            type: "error",
+            text: `Failed to sync ${data.failed} meal${data.failed !== 1 ? "s" : ""}. Please sign out and sign back in to refresh your Google access.`,
+          });
+        } else if (data.created === 0 && data.skipped > 0) {
           setSyncMessage({
             type: "info",
             text: "All meals are already synced to calendar.",
@@ -815,6 +833,18 @@ export default function WeeklyPlanDetailPage() {
 
   const groceryList = weeklyPlan?.grocery_list?.[0];
 
+  // Create a map of store name to store info for quick lookup
+  const storeInfoMap = useMemo(() => {
+    const map = new Map<string, { sortOrder: number; departmentOrder: string[] | null }>();
+    stores.forEach((store, index) => {
+      map.set(store.name, {
+        sortOrder: index, // Use the index since stores are already ordered by sort_order from API
+        departmentOrder: store.department_order || null,
+      });
+    });
+    return map;
+  }, [stores]);
+
   // Group by store, then by department within each store
   const groceryItemsByStoreAndDept = useMemo(() => {
     if (!groceryList?.grocery_items) return new Map<string, Map<string, GroceryItem[]>>();
@@ -831,7 +861,7 @@ export default function WeeklyPlanDetailPage() {
 
     // Then, within each store, group by department
     const result = new Map<string, Map<string, GroceryItem[]>>();
-    byStore.forEach((items, store) => {
+    byStore.forEach((items, storeName) => {
       const byDept = new Map<string, GroceryItem[]>();
       items.forEach((item) => {
         const dept = item.ingredients?.department || "Other";
@@ -850,23 +880,30 @@ export default function WeeklyPlanDetailPage() {
         });
       });
 
-      // Sort departments by predefined order
+      // Sort departments using store's custom order if available
+      const storeInfo = storeInfoMap.get(storeName);
       const sortedDepts = Array.from(byDept.entries()).sort((a, b) => {
-        return getDepartmentSortIndex(a[0]) - getDepartmentSortIndex(b[0]);
+        return getDepartmentSortIndexForStore(a[0], storeInfo?.departmentOrder) - getDepartmentSortIndexForStore(b[0], storeInfo?.departmentOrder);
       });
 
-      result.set(store, new Map(sortedDepts));
+      result.set(storeName, new Map(sortedDepts));
     });
 
-    // Sort stores (No Store Assigned last)
+    // Sort stores by their sort_order (No Store Assigned last)
     const sortedStores = Array.from(result.entries()).sort((a, b) => {
       if (a[0] === "No Store Assigned") return 1;
       if (b[0] === "No Store Assigned") return -1;
-      return a[0].localeCompare(b[0]);
+      const aInfo = storeInfoMap.get(a[0]);
+      const bInfo = storeInfoMap.get(b[0]);
+      // If store not found in map, put it before "No Store Assigned" but after known stores
+      if (aInfo === undefined && bInfo === undefined) return a[0].localeCompare(b[0]);
+      if (aInfo === undefined) return 1;
+      if (bInfo === undefined) return -1;
+      return aInfo.sortOrder - bInfo.sortOrder;
     });
 
     return new Map(sortedStores);
-  }, [groceryList?.grocery_items]);
+  }, [groceryList?.grocery_items, storeInfoMap]);
 
   const checkedCount = groceryList?.grocery_items.filter((i) => i.checked).length || 0;
   const totalCount = groceryList?.grocery_items.length || 0;

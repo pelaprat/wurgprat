@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import Providers from "@/components/Providers";
 import Navigation from "@/components/Navigation";
+import BottomNav from "@/components/BottomNav";
 import packageJson from "../../package.json";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -13,6 +14,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  viewportFit: "cover",
 };
 
 export const metadata: Metadata = {
@@ -31,12 +33,13 @@ export default function RootLayout({
         <Providers>
           <div className="min-h-screen flex flex-col">
             <Navigation />
-            <main className="flex-1 container mx-auto px-4 py-8">
+            <main className="flex-1 container mx-auto px-4 py-6 pb-24 lg:pb-6">
               {children}
             </main>
-            <footer className="py-2 text-center text-xs text-gray-400">
+            <footer className="hidden lg:block py-2 text-center text-xs text-gray-400">
               v{appVersion}
             </footer>
+            <BottomNav />
           </div>
         </Providers>
       </body>

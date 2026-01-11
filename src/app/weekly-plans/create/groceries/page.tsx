@@ -8,11 +8,20 @@ import {
   useMealPlanWizard,
   GroceryItemDraft,
 } from "@/contexts/MealPlanWizardContext";
-import { DEPARTMENT_ORDER, getDepartmentSortIndex } from "@/constants/grocery";
+import { DEPARTMENT_ORDER, getDepartmentSortIndexForStore } from "@/constants/grocery";
+import WizardProgress from "@/components/WizardProgress";
+
+const WIZARD_STEPS = [
+  { id: "review", label: "Meals", href: "/weekly-plans/create/review" },
+  { id: "staples", label: "Staples", href: "/weekly-plans/create/staples" },
+  { id: "events", label: "Events", href: "/weekly-plans/create/events" },
+  { id: "groceries", label: "Groceries", href: "/weekly-plans/create/groceries" },
+];
 
 interface Store {
   id: string;
   name: string;
+  department_order?: string[] | null;
 }
 
 interface EditingItem {
@@ -29,7 +38,6 @@ export default function GroceriesPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
   const [stores, setStores] = useState<Store[]>([]);
   const [editingItem, setEditingItem] = useState<EditingItem | null>(null);
   const [newItemName, setNewItemName] = useState("");
@@ -56,7 +64,7 @@ export default function GroceriesPage() {
   // Redirect if no meals proposed yet
   useEffect(() => {
     if (!wizard.proposedMeals || wizard.proposedMeals.length === 0) {
-      router.replace("/weekly-plans/create/input");
+      router.replace("/weekly-plans/create/review");
       return;
     }
 
@@ -96,6 +104,18 @@ export default function GroceriesPage() {
     }
   };
 
+  // Create a map of store name to store info for quick lookup
+  const storeInfoMap = useMemo(() => {
+    const map = new Map<string, { sortOrder: number; departmentOrder: string[] | null }>();
+    stores.forEach((store, index) => {
+      map.set(store.name, {
+        sortOrder: index, // Use the index since stores are already ordered by sort_order from API
+        departmentOrder: store.department_order || null,
+      });
+    });
+    return map;
+  }, [stores]);
+
   // Group by store, then by department within each store
   const groceryItemsByStoreAndDept = useMemo(() => {
     const items = wizard.groceryItems.filter((i) => !i.checked);
@@ -112,7 +132,7 @@ export default function GroceriesPage() {
 
     // Then, within each store, group by department
     const result = new Map<string, Map<string, GroceryItemDraft[]>>();
-    byStore.forEach((storeItems, store) => {
+    byStore.forEach((storeItems, storeName) => {
       const byDept = new Map<string, GroceryItemDraft[]>();
       storeItems.forEach((item) => {
         const dept = item.department || "Other";
@@ -127,23 +147,30 @@ export default function GroceriesPage() {
         deptItems.sort((a, b) => a.ingredientName.localeCompare(b.ingredientName));
       });
 
-      // Sort departments by predefined order
+      // Sort departments using store's custom order if available
+      const storeInfo = storeInfoMap.get(storeName);
       const sortedDepts = Array.from(byDept.entries()).sort((a, b) => {
-        return getDepartmentSortIndex(a[0]) - getDepartmentSortIndex(b[0]);
+        return getDepartmentSortIndexForStore(a[0], storeInfo?.departmentOrder) - getDepartmentSortIndexForStore(b[0], storeInfo?.departmentOrder);
       });
 
-      result.set(store, new Map(sortedDepts));
+      result.set(storeName, new Map(sortedDepts));
     });
 
-    // Sort stores (No Store Assigned last)
+    // Sort stores by their sort_order (No Store Assigned last)
     const sortedStores = Array.from(result.entries()).sort((a, b) => {
       if (a[0] === "No Store Assigned") return 1;
       if (b[0] === "No Store Assigned") return -1;
-      return a[0].localeCompare(b[0]);
+      const aInfo = storeInfoMap.get(a[0]);
+      const bInfo = storeInfoMap.get(b[0]);
+      // If store not found in map, put it before "No Store Assigned" but after known stores
+      if (aInfo === undefined && bInfo === undefined) return a[0].localeCompare(b[0]);
+      if (aInfo === undefined) return 1;
+      if (bInfo === undefined) return -1;
+      return aInfo.sortOrder - bInfo.sortOrder;
     });
 
     return new Map(sortedStores);
-  }, [wizard.groceryItems]);
+  }, [wizard.groceryItems, storeInfoMap]);
 
   // Handle store change
   const handleStoreChange = (itemId: string, storeId: string) => {
@@ -218,13 +245,11 @@ export default function GroceriesPage() {
         throw new Error(data.error || "Failed to create weekly plan");
       }
 
-      setSuccess(true);
-
       // Reset wizard after successful creation
       wizard.resetWizard();
 
-      // Redirect to home page with notification
-      router.push("/?notification=weekly-plan-created");
+      // Redirect to home page
+      router.push("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
@@ -237,39 +262,6 @@ export default function GroceriesPage() {
     return (
       <div className="text-center py-12">
         <p className="text-gray-600">Please sign in to continue.</p>
-      </div>
-    );
-  }
-
-  // Success state - shown briefly before redirect
-  if (success) {
-    return (
-      <div className="max-w-2xl mx-auto text-center py-12">
-        <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
-          <svg
-            className="w-8 h-8 text-emerald-600"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M5 13l4 4L19 7"
-            />
-          </svg>
-        </div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">
-          Weekly Plan Created!
-        </h1>
-        <p className="text-gray-600 mb-4">Redirecting...</p>
-        <Link
-          href="/"
-          className="text-emerald-600 hover:text-emerald-700"
-        >
-          Go to Home
-        </Link>
       </div>
     );
   }
@@ -301,7 +293,7 @@ export default function GroceriesPage() {
           </Link>
           <span>/</span>
           <Link
-            href="/weekly-plans/create/input"
+            href="/weekly-plans/create/review"
             className="hover:text-emerald-600 transition-colors"
           >
             Create
@@ -309,27 +301,15 @@ export default function GroceriesPage() {
           <span>/</span>
           <span className="text-gray-900">Groceries</span>
         </div>
-        <h1 className="text-2xl font-bold text-gray-900">Grocery List</h1>
-        <p className="text-gray-600 mt-1">
-          Step 5 of 5: Review your shopping list and finalize your plan
+        <h1 className="text-2xl font-bold text-gray-900 mb-4">Grocery List</h1>
+        <WizardProgress steps={WIZARD_STEPS} currentStep="groceries" />
+        <p className="text-gray-600">
+          Review your shopping list and finalize your plan
         </p>
       </div>
 
-      {/* Progress indicator - 5 steps */}
-      <div className="flex items-center gap-2 mb-6">
-        <div className="flex items-center">
-          <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center text-sm font-medium">
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-              <path
-                fillRule="evenodd"
-                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                clipRule="evenodd"
-              />
-            </svg>
-          </div>
-          <span className="ml-2 text-sm text-emerald-600">Start</span>
-        </div>
-        <div className="flex-1 h-0.5 bg-emerald-600 mx-2"></div>
+      {/* Old progress indicator - hidden */}
+      <div className="hidden flex items-center gap-2 mb-6">
         <div className="flex items-center">
           <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center text-sm font-medium">
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
@@ -371,7 +351,7 @@ export default function GroceriesPage() {
         <div className="flex-1 h-0.5 bg-emerald-600 mx-2"></div>
         <div className="flex items-center">
           <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center text-sm font-medium">
-            5
+            4
           </div>
           <span className="ml-2 text-sm font-medium text-gray-900">Groceries</span>
         </div>

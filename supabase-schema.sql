@@ -39,10 +39,16 @@ create table stores (
   household_id uuid references households(id) not null,
   name text not null,
   sort_order integer default 0,
+  department_order text[] default null,
   created_at timestamptz default now() not null,
 
   unique(household_id, name)
 );
+
+comment on column stores.department_order is 'Custom department display order for this store. NULL uses default order.';
+
+-- MIGRATION: If you have an existing database, run:
+-- ALTER TABLE stores ADD COLUMN department_order text[] DEFAULT NULL;
 
 -- Events table (household events from Google Calendar, e.g., kids activities)
 create table events (

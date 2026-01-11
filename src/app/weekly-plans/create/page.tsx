@@ -8,7 +8,7 @@ export default function CreateWeeklyPlanPage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace("/weekly-plans/create/input");
+    router.replace("/weekly-plans/create/review");
   }, [router]);
 
   return (

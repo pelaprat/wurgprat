@@ -17,11 +17,33 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   }
 
   const accessToken = session.accessToken as string | undefined;
+  console.log("[sync-calendar] Access token check:", {
+    hasAccessToken: !!accessToken,
+    tokenLength: accessToken?.length,
+    tokenPreview: accessToken ? `${accessToken.substring(0, 20)}...` : null,
+  });
+
   if (!accessToken) {
     return NextResponse.json(
       { error: "No access token. Please sign out and sign back in." },
       { status: 401 }
     );
+  }
+
+  // Debug: Check token info to see what scopes it has
+  try {
+    const tokenInfoResponse = await fetch(
+      `https://oauth2.googleapis.com/tokeninfo?access_token=${accessToken}`
+    );
+    const tokenInfo = await tokenInfoResponse.json();
+    console.log("[sync-calendar] Token info:", {
+      scope: tokenInfo.scope,
+      email: tokenInfo.email,
+      error: tokenInfo.error,
+      error_description: tokenInfo.error_description,
+    });
+  } catch (e) {
+    console.log("[sync-calendar] Failed to get token info:", e);
   }
 
   const supabase = getServiceSupabase();
@@ -75,10 +97,34 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     .eq("household_id", user.household_id)
     .single();
 
+  console.log("[sync-calendar] Query result:", {
+    planId: id,
+    weeklyPlanId: weeklyPlan?.id,
+    mealsCount: weeklyPlan?.meals?.length ?? 0,
+    planError: planError?.message,
+    meals: weeklyPlan?.meals,
+  });
+
+  // Query meals directly - more reliable than relational query
+  const { data: directMeals, error: directMealsError } = await supabase
+    .from("meals")
+    .select("id, day, meal_type, recipe_id, custom_meal_name, calendar_event_id")
+    .eq("weekly_plan_id", id);
+
+  console.log("[sync-calendar] Direct meals query:", {
+    directMealsCount: directMeals?.length ?? 0,
+    directMealsError: directMealsError?.message,
+    directMeals,
+  });
+
+  // Use direct meals query as primary source (more reliable than relational query)
+  // This ensures we get meals even if Supabase relationship inference has issues
+  const mealsToProcess = directMeals || [];
+
   // Get recipe names for meals that have recipes
-  const recipeIds = (weeklyPlan?.meals || [])
-    .filter((m: { recipe_id?: string }) => m.recipe_id)
-    .map((m: { recipe_id: string }) => m.recipe_id);
+  const recipeIds = mealsToProcess
+    .filter((m) => m.recipe_id)
+    .map((m) => m.recipe_id as string);
 
   let recipeNames: Record<string, string> = {};
   if (recipeIds.length > 0) {
@@ -97,11 +143,22 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Weekly plan not found" }, { status: 404 });
   }
 
-  // Get user names for assigned users
+  // Get user names for assigned users (need to get from direct query with assigned_user_id)
+  // Since our direct query doesn't include assigned_user_id, fetch it now
+  const { data: mealsWithAssignees } = await supabase
+    .from("meals")
+    .select("id, assigned_user_id")
+    .eq("weekly_plan_id", id);
+
+  const assigneeMap = new Map<string, string | null>();
+  (mealsWithAssignees || []).forEach(m => {
+    assigneeMap.set(m.id, m.assigned_user_id);
+  });
+
   const assignedUserIds = Array.from(new Set(
-    (weeklyPlan.meals || [])
-      .filter((m: { assigned_user_id?: string }) => m.assigned_user_id)
-      .map((m: { assigned_user_id: string }) => m.assigned_user_id)
+    (mealsWithAssignees || [])
+      .filter((m) => m.assigned_user_id)
+      .map((m) => m.assigned_user_id as string)
   ));
 
   let userNames: Record<string, string> = {};
@@ -133,8 +190,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   let failed = 0;
   const errors: string[] = [];
 
-  // Process each meal
-  for (const meal of weeklyPlan.meals || []) {
+  // Process each meal from direct query
+  for (const meal of mealsToProcess) {
     // Skip meals that already have calendar events
     if (meal.calendar_event_id) {
       skipped++;
@@ -149,8 +206,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const date = getDayDate(meal.day);
-    const assignedUserName = meal.assigned_user_id
-      ? userNames[meal.assigned_user_id]
+    const assignedUserId = assigneeMap.get(meal.id);
+    const assignedUserName = assignedUserId
+      ? userNames[assignedUserId]
       : undefined;
 
     try {
@@ -180,6 +238,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       errors.push(`${mealName}: ${message}`);
     }
   }
+
+  console.log("[sync-calendar] Final result:", {
+    mealsToProcessCount: mealsToProcess.length,
+    created,
+    skipped,
+    failed,
+    recipeIdsCount: recipeIds.length,
+    recipeNamesCount: Object.keys(recipeNames).length,
+  });
 
   return NextResponse.json({
     success: true,

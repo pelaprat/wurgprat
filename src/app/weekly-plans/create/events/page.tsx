@@ -8,6 +8,14 @@ import { useMealPlanWizard } from "@/contexts/MealPlanWizardContext";
 import { Event } from "@/contexts/EventsContext";
 import { formatDateLocal } from "@/utils/dates";
 import { DAY_NAMES } from "@/constants/calendar";
+import WizardProgress from "@/components/WizardProgress";
+
+const WIZARD_STEPS = [
+  { id: "review", label: "Meals", href: "/weekly-plans/create/review" },
+  { id: "staples", label: "Staples", href: "/weekly-plans/create/staples" },
+  { id: "events", label: "Events", href: "/weekly-plans/create/events" },
+  { id: "groceries", label: "Groceries", href: "/weekly-plans/create/groceries" },
+];
 
 interface HouseholdMember {
   id: string;
@@ -191,7 +199,7 @@ export default function EventsPage() {
   // Redirect if no meals proposed yet or no events
   useEffect(() => {
     if (!wizard.proposedMeals || wizard.proposedMeals.length === 0) {
-      router.replace("/weekly-plans/create/input");
+      router.replace("/weekly-plans/create/review");
       return;
     }
     if (wizard.weekEvents.length === 0) {
@@ -289,7 +297,7 @@ export default function EventsPage() {
           </Link>
           <span>/</span>
           <Link
-            href="/weekly-plans/create/input"
+            href="/weekly-plans/create/review"
             className="hover:text-emerald-600 transition-colors"
           >
             Create
@@ -297,27 +305,15 @@ export default function EventsPage() {
           <span>/</span>
           <span className="text-gray-900">Events</span>
         </div>
-        <h1 className="text-2xl font-bold text-gray-900">Event Assignments</h1>
-        <p className="text-gray-600 mt-1">
-          Step 4 of 5: Assign who&apos;s responsible for each event
+        <h1 className="text-2xl font-bold text-gray-900 mb-4">Event Assignments</h1>
+        <WizardProgress steps={WIZARD_STEPS} currentStep="events" />
+        <p className="text-gray-600">
+          Assign who&apos;s responsible for each event
         </p>
       </div>
 
-      {/* Progress indicator - 5 steps */}
-      <div className="flex items-center gap-2 mb-6">
-        <div className="flex items-center">
-          <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center text-sm font-medium">
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-              <path
-                fillRule="evenodd"
-                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                clipRule="evenodd"
-              />
-            </svg>
-          </div>
-          <span className="ml-2 text-sm text-emerald-600">Start</span>
-        </div>
-        <div className="flex-1 h-0.5 bg-emerald-600 mx-2"></div>
+      {/* Old progress indicator - hidden */}
+      <div className="hidden flex items-center gap-2 mb-6">
         <div className="flex items-center">
           <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center text-sm font-medium">
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
@@ -346,14 +342,14 @@ export default function EventsPage() {
         <div className="flex-1 h-0.5 bg-emerald-600 mx-2"></div>
         <div className="flex items-center">
           <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center text-sm font-medium">
-            4
+            3
           </div>
           <span className="ml-2 text-sm font-medium text-gray-900">Events</span>
         </div>
         <div className="flex-1 h-0.5 bg-gray-200 mx-2"></div>
         <div className="flex items-center">
           <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-sm font-medium">
-            5
+            4
           </div>
           <span className="ml-2 text-sm text-gray-500">Groceries</span>
         </div>

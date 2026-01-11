@@ -141,6 +141,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    console.log("[create-complete] Meals created successfully:", {
+      weeklyPlanId: weeklyPlan.id,
+      mealsCount: createdMeals.length,
+      mealIds: createdMeals.map(m => m.id),
+    });
+
     // 2.5. Create Google Calendar events for meals (if calendar is configured)
     const accessToken = session.accessToken as string | undefined;
 
