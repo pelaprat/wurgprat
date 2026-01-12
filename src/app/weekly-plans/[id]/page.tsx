@@ -1307,8 +1307,75 @@ export default function WeeklyPlanDetailPage() {
 
                   return (
                     <DroppableDay key={index} dayIndex={index}>
+                      {/* Mobile Layout - Two lines */}
+                      <div className={`md:hidden p-4 ${today ? "bg-emerald-50" : "hover:bg-gray-50"} transition-colors`}>
+                        {/* Line 1: Date + Day name */}
+                        <div className="flex items-center gap-3 mb-3">
+                          <DateIcon dayIndex={index} weekOf={weeklyPlan.week_of} isHighlighted={today} />
+                          <div className={`text-base font-semibold ${today ? "text-emerald-700" : "text-gray-900"}`}>
+                            {dayName}
+                            {today && <span className="ml-2 text-xs font-medium bg-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full">Today</span>}
+                          </div>
+                        </div>
+                        {/* Line 2: Meal details */}
+                        {meals.length > 0 ? (
+                          <div className="space-y-3 pl-2">
+                            {meals.map((meal) => (
+                              <div key={meal.id} className="flex flex-col gap-2">
+                                {/* Recipe name row */}
+                                <div className="flex items-center gap-2">
+                                  {meal.recipes ? (
+                                    <Link
+                                      href={`/recipes/${meal.recipes.id}`}
+                                      className="font-medium text-gray-900 hover:text-emerald-600 transition-colors"
+                                    >
+                                      {meal.recipes.name}
+                                    </Link>
+                                  ) : meal.custom_meal_name ? (
+                                    <span className="font-medium text-gray-900">
+                                      {meal.custom_meal_name}
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-400 italic">No meal</span>
+                                  )}
+                                  {meal.is_leftover && (
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">
+                                      Leftovers
+                                    </span>
+                                  )}
+                                </div>
+                                {/* Controls row */}
+                                <div className="flex items-center gap-2">
+                                  <AssigneeDropdown
+                                    currentAssignee={meal.assigned_user}
+                                    members={householdMembers}
+                                    onSelect={(userId) => handleMealAssigneeChange(meal.id, userId)}
+                                    isUpdating={updatingMeals.has(meal.id)}
+                                  />
+                                  <select
+                                    value={meal.day}
+                                    onChange={(e) => handleMoveMeal(meal.id, parseInt(e.target.value))}
+                                    disabled={updatingMeals.has(meal.id)}
+                                    className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-600 focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:opacity-50 min-h-[44px]"
+                                  >
+                                    {DAY_NAMES.map((name, idx) => (
+                                      <option key={idx} value={idx + 1}>
+                                        {name.slice(0, 3)}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-sm text-gray-400 italic pl-2">No dinner planned</span>
+                        )}
+                      </div>
+
+                      {/* Desktop Layout - Single row */}
                       <div
-                        className={`flex items-center gap-4 p-4 ${today ? "bg-emerald-50" : "hover:bg-gray-50"} transition-colors`}
+                        className={`hidden md:flex items-center gap-4 p-4 ${today ? "bg-emerald-50" : "hover:bg-gray-50"} transition-colors`}
                       >
                         {/* Date Column - iCal Style */}
                         <div className="flex-shrink-0">
@@ -1327,7 +1394,7 @@ export default function WeeklyPlanDetailPage() {
                                 <DraggableMeal key={meal.id} meal={meal}>
                                   <div className="flex items-center gap-2">
                                     {/* Drag handle for desktop */}
-                                    <div className="hidden md:flex items-center cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 flex-shrink-0" title="Drag to move">
+                                    <div className="flex items-center cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 flex-shrink-0" title="Drag to move">
                                       <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                                         <path d="M7 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 2zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 14zm6-8a2 2 0 1 0-.001-4.001A2 2 0 0 0 13 6zm0 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 14z" />
                                       </svg>
@@ -1351,19 +1418,6 @@ export default function WeeklyPlanDetailPage() {
                                         Leftovers
                                       </span>
                                     )}
-                                    {/* Mobile day selector */}
-                                    <select
-                                      value={meal.day}
-                                      onChange={(e) => handleMoveMeal(meal.id, parseInt(e.target.value))}
-                                      disabled={updatingMeals.has(meal.id)}
-                                      className="md:hidden ml-auto px-2 py-1 text-xs border border-gray-200 rounded-lg bg-white text-gray-600 focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:opacity-50"
-                                    >
-                                      {DAY_NAMES.map((name, idx) => (
-                                        <option key={idx} value={idx + 1}>
-                                          {name.slice(0, 3)}
-                                        </option>
-                                      ))}
-                                    </select>
                                   </div>
                                 </DraggableMeal>
                               ))}
