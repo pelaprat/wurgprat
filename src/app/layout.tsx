@@ -4,6 +4,7 @@ import "./globals.css";
 import Providers from "@/components/Providers";
 import Navigation from "@/components/Navigation";
 import BottomNav from "@/components/BottomNav";
+import { PirateOverlay } from "@/components/PirateOverlay";
 import packageJson from "../../package.json";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -41,6 +42,7 @@ export default function RootLayout({
             </footer>
             <BottomNav />
           </div>
+          <PirateOverlay />
         </Providers>
       </body>
     </html>
