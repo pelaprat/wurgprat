@@ -118,7 +118,7 @@ export async function deleteCalendarEvent(
   });
 }
 
-// Add a meal to Google Calendar
+// Add a meal to Google Calendar (all-day event)
 export async function addMealToCalendar(
   accessToken: string,
   calendarId: string,
@@ -127,20 +127,19 @@ export async function addMealToCalendar(
   mealName: string,
   description?: string
 ) {
-  const startTime = getMealTime(date, mealType);
-  const endTime = new Date(startTime.getTime() + 60 * 60 * 1000); // 1 hour
-  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  // Calculate end date (next day for all-day events)
+  const [year, month, day] = date.split("-").map(Number);
+  const endDate = new Date(year, month - 1, day + 1);
+  const endDateStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, "0")}-${String(endDate.getDate()).padStart(2, "0")}`;
 
   return createCalendarEvent(accessToken, calendarId, {
-    summary: `${mealType}: ${mealName}`,
+    summary: `🍽️ ${mealType}: ${mealName}`,
     description: description || "",
     start: {
-      dateTime: startTime.toISOString(),
-      timeZone,
+      date: date,
     },
     end: {
-      dateTime: endTime.toISOString(),
-      timeZone,
+      date: endDateStr,
     },
   });
 }
@@ -161,7 +160,7 @@ function getMealTime(date: string, mealType: string): Date {
   return d;
 }
 
-// Create a Google Calendar event for a meal
+// Create a Google Calendar event for a meal (all-day event)
 export async function createMealCalendarEvent(
   accessToken: string,
   calendarId: string,
@@ -174,12 +173,12 @@ export async function createMealCalendarEvent(
     timezone?: string;
   }
 ): Promise<string | null> {
-  const { mealId, date, mealType, mealName, assignedUserName, timezone } = options;
+  const { mealId, date, mealType, mealName, assignedUserName } = options;
 
-  // Build the title: "Spaghetti (Chef: John)" for dinner, "Breakfast: Pancakes" for others
+  // Build the title with emoji: "🍽️ Spaghetti (Chef: John)" for dinner, "🍽️ Breakfast: Pancakes" for others
   let title = mealType === "dinner"
-    ? mealName
-    : `${mealType.charAt(0).toUpperCase() + mealType.slice(1)}: ${mealName}`;
+    ? `🍽️ ${mealName}`
+    : `🍽️ ${mealType.charAt(0).toUpperCase() + mealType.slice(1)}: ${mealName}`;
   if (assignedUserName) {
     title += ` (Chef: ${assignedUserName})`;
   }
@@ -187,21 +186,20 @@ export async function createMealCalendarEvent(
   // Build description with identifier
   const description = `${MEAL_EVENT_IDENTIFIER}\nMeal ID: ${mealId}`;
 
-  const startTime = getMealTime(date, mealType);
-  const endTime = new Date(startTime.getTime() + 60 * 60 * 1000); // 1 hour
-  const tz = timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  // Calculate end date (next day for all-day events)
+  const [year, month, day] = date.split("-").map(Number);
+  const endDate = new Date(year, month - 1, day + 1);
+  const endDateStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, "0")}-${String(endDate.getDate()).padStart(2, "0")}`;
 
   try {
     const event = await createCalendarEvent(accessToken, calendarId, {
       summary: title,
       description,
       start: {
-        dateTime: startTime.toISOString(),
-        timeZone: tz,
+        date: date, // All-day event uses date, not dateTime
       },
       end: {
-        dateTime: endTime.toISOString(),
-        timeZone: tz,
+        date: endDateStr, // End date is exclusive, so next day
       },
     });
 
@@ -226,10 +224,10 @@ export async function updateMealCalendarEvent(
 ): Promise<boolean> {
   const { mealId, mealName, mealType, assignedUserName } = options;
 
-  // Build the title: "Spaghetti (Chef: John)" for dinner, "Breakfast: Pancakes" for others
+  // Build the title with emoji: "🍽️ Spaghetti (Chef: John)" for dinner, "🍽️ Breakfast: Pancakes" for others
   let title = mealType === "dinner"
-    ? mealName
-    : `${mealType.charAt(0).toUpperCase() + mealType.slice(1)}: ${mealName}`;
+    ? `🍽️ ${mealName}`
+    : `🍽️ ${mealType.charAt(0).toUpperCase() + mealType.slice(1)}: ${mealName}`;
   if (assignedUserName) {
     title += ` (Chef: ${assignedUserName})`;
   }
@@ -249,7 +247,7 @@ export async function updateMealCalendarEvent(
   }
 }
 
-// Update a Google Calendar event's date/time when a meal is moved to a different day
+// Update a Google Calendar event's date when a meal is moved to a different day (all-day event)
 export async function updateMealCalendarEventDateTime(
   accessToken: string,
   calendarId: string,
@@ -260,26 +258,25 @@ export async function updateMealCalendarEventDateTime(
     timezone?: string;
   }
 ): Promise<boolean> {
-  const { newDate, mealType, timezone } = options;
+  const { newDate } = options;
 
-  const startTime = getMealTime(newDate, mealType);
-  const endTime = new Date(startTime.getTime() + 60 * 60 * 1000); // 1 hour
-  const tz = timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  // Calculate end date (next day for all-day events)
+  const [year, month, day] = newDate.split("-").map(Number);
+  const endDate = new Date(year, month - 1, day + 1);
+  const endDateStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, "0")}-${String(endDate.getDate()).padStart(2, "0")}`;
 
   try {
     await updateCalendarEvent(accessToken, calendarId, eventId, {
       start: {
-        dateTime: startTime.toISOString(),
-        timeZone: tz,
+        date: newDate, // All-day event uses date, not dateTime
       },
       end: {
-        dateTime: endTime.toISOString(),
-        timeZone: tz,
+        date: endDateStr, // End date is exclusive, so next day
       },
     });
     return true;
   } catch (error) {
-    console.error("Failed to update meal calendar event date/time:", error);
+    console.error("Failed to update meal calendar event date:", error);
     return false;
   }
 }

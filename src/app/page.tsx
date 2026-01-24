@@ -246,9 +246,6 @@ function HomeContent() {
   }
 
   const dinnerMeals = todayData?.meals.filter((m) => m.meal_type === "dinner") || [];
-  const userIsCooking = todayData?.responsibilities.cooking && todayData.responsibilities.cooking.length > 0;
-  const userHasEvents = todayData?.responsibilities.events && todayData.responsibilities.events.length > 0;
-  const hasResponsibilities = userIsCooking || userHasEvents;
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -402,51 +399,12 @@ function HomeContent() {
             </div>
           </div>
 
-          {/* Your Responsibilities - Only show if user has tasks */}
-          {hasResponsibilities && (
-            <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl p-6 mb-6 text-white shadow-lg">
-              <h2 className="text-sm font-medium text-emerald-100 uppercase tracking-wide mb-3">Your tasks today</h2>
-              <div className="space-y-3">
-                {userIsCooking && (
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                      </svg>
-                    </div>
-                    <div>
-                      <div className="font-semibold text-lg">
-                        Cook {todayData!.responsibilities.cooking.map(m => m.name).join(" & ")}
-                      </div>
-                      <div className="text-emerald-100 text-sm">Tonight&apos;s dinner</div>
-                    </div>
-                  </div>
-                )}
-                {userHasEvents && todayData!.responsibilities.events.map((event) => (
-                  <div key={event.id} className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <div className="font-semibold text-lg">{event.title}</div>
-                      <div className="text-emerald-100 text-sm">
-                        {event.all_day ? "All day" : new Date(event.start_time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Main Content Grid */}
+          {/* Unified Today Timeline */}
           <div className="space-y-4">
-            {/* Tonight's Dinner */}
+            {/* Today Section */}
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-                <h2 className="font-semibold text-gray-900">Tonight&apos;s Dinner</h2>
+                <h2 className="font-semibold text-gray-900">Today</h2>
                 {todayData?.weeklyPlan && (
                   <Link
                     href={`/weekly-plans/${todayData.weeklyPlan.id}?tab=dinner`}
@@ -456,96 +414,125 @@ function HomeContent() {
                   </Link>
                 )}
               </div>
-              <div className="p-5">
-                {dinnerMeals.length > 0 ? (
-                  <div className="space-y-3">
-                    {dinnerMeals.map((meal) => {
-                      const isUserCooking = meal.assigned_user_id === todayData?.user.id;
-                      const mealName = meal.recipe?.name || meal.custom_meal_name;
+
+              {(dinnerMeals.length > 0 || (todayData?.events && todayData.events.length > 0)) ? (
+                <div className="divide-y divide-gray-100">
+                  {/* Events - sorted by time, all-day first */}
+                  {todayData?.events
+                    .slice()
+                    .sort((a, b) => {
+                      if (a.all_day && !b.all_day) return -1;
+                      if (!a.all_day && b.all_day) return 1;
+                      return new Date(a.start_time).getTime() - new Date(b.start_time).getTime();
+                    })
+                    .map((event) => {
+                      const isUserResponsible = todayData.responsibilities.events.some(e => e.id === event.id);
 
                       return (
-                        <div key={meal.id} className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            {meal.recipe ? (
-                              <Link
-                                href={`/recipes/${meal.recipe.id}`}
-                                className="text-lg font-medium text-gray-900 hover:text-emerald-600 transition-colors"
-                              >
-                                {mealName}
-                              </Link>
-                            ) : (
-                              <span className="text-lg font-medium text-gray-900">{mealName || "No meal set"}</span>
-                            )}
+                        <div
+                          key={event.id}
+                          className={`px-5 py-4 flex items-center gap-4 ${
+                            isUserResponsible
+                              ? "bg-emerald-50 border-l-4 border-l-emerald-500"
+                              : "opacity-60"
+                          }`}
+                        >
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                            isUserResponsible ? "bg-emerald-100" : "bg-gray-100"
+                          }`}>
+                            <svg className={`w-5 h-5 ${isUserResponsible ? "text-emerald-600" : "text-gray-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
                           </div>
-                          {meal.assigned_user && (
-                            <span className={`text-sm px-2.5 py-1 rounded-full font-medium ${
-                              isUserCooking
-                                ? "bg-emerald-100 text-emerald-700"
-                                : "bg-gray-100 text-gray-600"
-                            }`}>
-                              {isUserCooking ? "You" : meal.assigned_user.name?.split(" ")[0]}
+                          <div className="flex-1 min-w-0">
+                            <div className={`font-medium truncate ${isUserResponsible ? "text-gray-900" : "text-gray-600"}`}>
+                              {event.title}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              {event.all_day
+                                ? "All day"
+                                : new Date(event.start_time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                              {event.location && ` · ${event.location}`}
+                            </div>
+                          </div>
+                          {isUserResponsible && (
+                            <span className="text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 font-medium flex-shrink-0">
+                              You
                             </span>
                           )}
                         </div>
                       );
                     })}
-                  </div>
-                ) : todayData?.weeklyPlan ? (
-                  <p className="text-gray-500">No dinner planned for tonight.</p>
-                ) : (
-                  <div className="text-center py-4">
-                    <p className="text-gray-500 mb-3">No meal plan for this week.</p>
-                    <Link
-                      href="/weekly-plans/create"
-                      className="inline-flex items-center gap-2 text-emerald-600 hover:text-emerald-700 font-medium"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
-                      Create a plan
-                    </Link>
-                  </div>
-                )}
-              </div>
-            </div>
 
-            {/* Today's Schedule */}
-            {todayData && todayData.events.length > 0 && (
-              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                <div className="px-5 py-4 border-b border-gray-100">
-                  <h2 className="font-semibold text-gray-900">Today&apos;s Schedule</h2>
-                </div>
-                <div className="divide-y divide-gray-100">
-                  {todayData.events.map((event) => {
-                    const isUserResponsible = todayData.responsibilities.events.some(e => e.id === event.id);
+                  {/* Dinner */}
+                  {dinnerMeals.map((meal) => {
+                    const isUserCooking = meal.assigned_user_id === todayData?.user.id;
+                    const mealName = meal.recipe?.name || meal.custom_meal_name;
 
                     return (
                       <div
-                        key={event.id}
-                        className={`px-5 py-3 flex items-center gap-4 ${isUserResponsible ? "bg-amber-50" : ""}`}
+                        key={meal.id}
+                        className={`px-5 py-4 flex items-center gap-4 ${
+                          isUserCooking
+                            ? "bg-emerald-50 border-l-4 border-l-emerald-500"
+                            : "opacity-60"
+                        }`}
                       >
-                        <div className="w-16 text-sm text-gray-500 flex-shrink-0">
-                          {event.all_day
-                            ? "All day"
-                            : new Date(event.start_time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                          isUserCooking ? "bg-emerald-100" : "bg-gray-100"
+                        }`}>
+                          <svg className={`w-5 h-5 ${isUserCooking ? "text-emerald-600" : "text-gray-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                          </svg>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="font-medium text-gray-900 truncate">{event.title}</div>
-                          {event.location && (
-                            <div className="text-sm text-gray-500 truncate">{event.location}</div>
+                          {meal.recipe ? (
+                            <Link
+                              href={`/recipes/${meal.recipe.id}`}
+                              className={`font-medium hover:text-emerald-600 transition-colors truncate block ${
+                                isUserCooking ? "text-gray-900" : "text-gray-600"
+                              }`}
+                            >
+                              {mealName}
+                            </Link>
+                          ) : (
+                            <span className={`font-medium truncate block ${isUserCooking ? "text-gray-900" : "text-gray-600"}`}>
+                              {mealName || "No meal set"}
+                            </span>
                           )}
+                          <div className="text-sm text-gray-500">
+                            Dinner
+                            {meal.assigned_user && !isUserCooking && ` · ${meal.assigned_user.name?.split(" ")[0]} cooking`}
+                          </div>
                         </div>
-                        {isUserResponsible && (
-                          <span className="text-xs px-2 py-1 rounded-full bg-amber-100 text-amber-700 font-medium flex-shrink-0">
-                            You
+                        {isUserCooking && (
+                          <span className="text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 font-medium flex-shrink-0">
+                            You&apos;re cooking
                           </span>
                         )}
                       </div>
                     );
                   })}
                 </div>
-              </div>
-            )}
+              ) : todayData?.weeklyPlan ? (
+                <div className="p-5 text-center">
+                  <p className="text-gray-500">Nothing scheduled for today.</p>
+                </div>
+              ) : (
+                <div className="p-5 text-center">
+                  <p className="text-gray-500 mb-3">No meal plan for this week.</p>
+                  <Link
+                    href="/weekly-plans/create"
+                    className="inline-flex items-center gap-2 text-emerald-600 hover:text-emerald-700 font-medium"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Create a plan
+                  </Link>
+                </div>
+              )}
+            </div>
 
             {/* Grocery List Quick Access */}
             {todayData?.weeklyPlan && (
