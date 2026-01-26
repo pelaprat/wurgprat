@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { PageHeaderSkeleton, CardSkeleton } from "@/components/Skeleton";
+import type { AllowanceSplitConfig } from "@/types";
 
 interface GoogleCalendar {
   id: string;
@@ -18,6 +19,12 @@ interface CalendarChangeConfirmation {
   newCalendarId: string;
   newCalendarName: string;
 }
+
+const DEFAULT_SPLITS: AllowanceSplitConfig[] = [
+  { key: "charity", name: "Charity", percentage: 10 },
+  { key: "saving", name: "Saving", percentage: 20 },
+  { key: "spending", name: "Spending", percentage: 70 },
+];
 
 const TIMEZONE_OPTIONS = [
   { group: "US & Canada", timezones: [
@@ -79,6 +86,14 @@ export default function SettingsPage() {
     text: string;
   } | null>(null);
 
+  // Allowance splits state
+  const [allowanceSplits, setAllowanceSplits] = useState<AllowanceSplitConfig[]>(DEFAULT_SPLITS);
+  const [isSavingSplits, setIsSavingSplits] = useState(false);
+  const [splitsMessage, setSplitsMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+
   const fetchSettings = useCallback(async () => {
     try {
       const response = await fetch("/api/settings");
@@ -116,12 +131,25 @@ export default function SettingsPage() {
     }
   }, []);
 
+  const fetchAllowanceSplits = useCallback(async () => {
+    try {
+      const response = await fetch("/api/settings/allowance-splits");
+      if (response.ok) {
+        const data = await response.json();
+        setAllowanceSplits(data.splits || DEFAULT_SPLITS);
+      }
+    } catch (error) {
+      console.error("Failed to fetch allowance splits:", error);
+    }
+  }, []);
+
   useEffect(() => {
     if (session) {
       fetchSettings();
       fetchCalendars();
+      fetchAllowanceSplits();
     }
-  }, [session, fetchSettings, fetchCalendars]);
+  }, [session, fetchSettings, fetchCalendars, fetchAllowanceSplits]);
 
   const handleSave = async (confirmCalendarChange = false) => {
     setIsSaving(true);
@@ -200,6 +228,67 @@ export default function SettingsPage() {
       setIsSyncing(false);
     }
   };
+
+  const handleSplitNameChange = (index: number, name: string) => {
+    setAllowanceSplits((prev) =>
+      prev.map((split, i) => (i === index ? { ...split, name } : split))
+    );
+    setSplitsMessage(null);
+  };
+
+  const handleSplitPercentageChange = (index: number, percentage: number) => {
+    setAllowanceSplits((prev) =>
+      prev.map((split, i) => (i === index ? { ...split, percentage } : split))
+    );
+    setSplitsMessage(null);
+  };
+
+  const handleSaveSplits = async () => {
+    // Validate percentages sum to 100
+    const total = allowanceSplits.reduce((sum, s) => sum + s.percentage, 0);
+    if (total !== 100) {
+      setSplitsMessage({
+        type: "error",
+        text: `Percentages must sum to 100% (currently ${total}%)`,
+      });
+      return;
+    }
+
+    // Validate all names are filled
+    if (allowanceSplits.some((s) => !s.name.trim())) {
+      setSplitsMessage({
+        type: "error",
+        text: "All split names are required",
+      });
+      return;
+    }
+
+    setIsSavingSplits(true);
+    setSplitsMessage(null);
+
+    try {
+      const response = await fetch("/api/settings/allowance-splits", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ splits: allowanceSplits }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setSplitsMessage({ type: "success", text: "Allowance splits saved!" });
+        setAllowanceSplits(data.splits);
+      } else {
+        setSplitsMessage({ type: "error", text: data.error || "Failed to save splits" });
+      }
+    } catch {
+      setSplitsMessage({ type: "error", text: "Failed to save splits" });
+    } finally {
+      setIsSavingSplits(false);
+    }
+  };
+
+  const getSplitTotal = () => allowanceSplits.reduce((sum, s) => sum + s.percentage, 0);
 
   if (!session) {
     return (
@@ -363,6 +452,66 @@ export default function SettingsPage() {
             </optgroup>
           ))}
         </select>
+      </div>
+
+      {/* Allowance Splits Settings */}
+      <div className="bg-white rounded-xl shadow-sm p-6 mb-4">
+        <h2 className="text-lg font-semibold text-gray-900 mb-2">
+          Allowance Splits
+        </h2>
+        <p className="text-sm text-gray-600 mb-4">
+          Configure how allowance money is split between categories for all kids.
+        </p>
+
+        <div className="space-y-3">
+          {allowanceSplits.map((split, index) => (
+            <div key={split.key} className="flex items-center gap-3">
+              <input
+                type="text"
+                value={split.name}
+                onChange={(e) => handleSplitNameChange(index, e.target.value)}
+                placeholder="Category name"
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+              />
+              <div className="relative w-24">
+                <input
+                  type="number"
+                  value={split.percentage}
+                  onChange={(e) => handleSplitPercentageChange(index, parseInt(e.target.value) || 0)}
+                  min="0"
+                  max="100"
+                  className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">%</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex items-center justify-between mt-4 pt-4 border-t">
+          <div className="flex items-center gap-2">
+            <span className={`text-sm ${getSplitTotal() === 100 ? "text-emerald-600" : "text-red-600"}`}>
+              Total: {getSplitTotal()}%
+            </span>
+            {getSplitTotal() !== 100 && (
+              <span className="text-xs text-red-500">(must equal 100%)</span>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            {splitsMessage && (
+              <span className={`text-sm ${splitsMessage.type === "success" ? "text-emerald-600" : "text-red-600"}`}>
+                {splitsMessage.text}
+              </span>
+            )}
+            <button
+              onClick={handleSaveSplits}
+              disabled={isSavingSplits || getSplitTotal() !== 100}
+              className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+            >
+              {isSavingSplits ? "Saving..." : "Save Splits"}
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Save Button */}

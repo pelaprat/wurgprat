@@ -81,6 +81,34 @@ Children belonging to a household.
 | created_at | timestamptz | Creation timestamp |
 | updated_at | timestamptz | Last updated timestamp |
 
+### allowance_splits
+Per-kid balances for each allowance split category (charity, saving, spending).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| kid_id | uuid | FK → kids.id |
+| split_key | text | Category key (e.g., "charity", "saving", "spending") |
+| balance | numeric(10,2) | Current balance for this split |
+| created_at | timestamptz | Creation timestamp |
+| updated_at | timestamptz | Last updated timestamp |
+
+**Unique constraint:** (kid_id, split_key)
+
+### allowance_transactions
+Transaction log for all allowance deposits and withdrawals.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| kid_id | uuid | FK → kids.id |
+| split_key | text | Which split this transaction affects |
+| amount | numeric(10,2) | Amount (positive=deposit, negative=withdrawal) |
+| transaction_type | text | "deposit" or "withdrawal" |
+| description | text | Purpose/reason for the transaction |
+| created_by | uuid | FK → users.id |
+| created_at | timestamptz | Creation timestamp |
+
 ### stores
 Stores where the household shops.
 
@@ -365,6 +393,11 @@ Stored in `households.settings`:
     "Frozen",
     "Bakery",
     "Other"
+  ],
+  "allowance_splits": [
+    { "key": "charity", "name": "Charity", "percentage": 10 },
+    { "key": "saving", "name": "Saving", "percentage": 20 },
+    { "key": "spending", "name": "Spending", "percentage": 70 }
   ]
 }
 ```
@@ -377,5 +410,6 @@ Stored in `households.settings`:
 | wishlist_recipes_sheet_url | Google Sheets URL for recipes to try (status: wishlist) |
 | events_calendar_url | ICS calendar URL for household events (e.g., kids activities) |
 | departments | Store sections for organizing grocery lists |
+| allowance_splits | Array of split categories with key, name, and percentage |
 
 Note: Stores are now managed in the `stores` table instead of settings.
