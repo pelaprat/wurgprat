@@ -16,26 +16,8 @@ export default function WizardProgress({ steps, currentStep }: WizardProgressPro
 
   return (
     <div className="mb-6">
-      {/* Mobile: Simple step counter */}
-      <div className="sm:hidden">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-medium text-gray-900">
-            Step {currentIndex + 1} of {steps.length}
-          </span>
-          <span className="text-sm text-gray-500">
-            {steps[currentIndex]?.label}
-          </span>
-        </div>
-        <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-emerald-500 transition-all duration-300 ease-out"
-            style={{ width: `${((currentIndex + 1) / steps.length) * 100}%` }}
-          />
-        </div>
-      </div>
-
-      {/* Desktop: Full step indicator */}
-      <nav className="hidden sm:block" aria-label="Progress">
+      {/* Step indicator */}
+      <nav aria-label="Progress">
         <ol className="flex items-center">
           {steps.map((step, index) => {
             const isCompleted = index < currentIndex;
