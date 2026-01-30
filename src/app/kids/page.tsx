@@ -704,19 +704,33 @@ export default function KidsPage() {
                         {calculateAge(kid.birth_date)} years old
                       </p>
                     )}
-                    <div className="flex gap-2 mt-2">
+                    <div className="mt-2 space-y-2">
                       <button
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
                           openAllowanceModal(kid);
                         }}
-                        className="text-sm px-2 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 active:scale-95 transition-all"
+                        className="w-full text-left text-sm px-3 py-2 rounded-lg bg-gray-50 hover:bg-gray-100 active:scale-[0.98] transition-all"
                       >
-                        <span className="text-gray-500">Allowance:</span>{" "}
-                        <span className="font-medium text-gray-900">
-                          {formatCurrency(getTotalSplitBalance(kid))}
-                        </span>
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500">Allowance</span>
+                          <span className="font-semibold text-gray-900">
+                            {formatCurrency(getTotalSplitBalance(kid))}
+                          </span>
+                        </div>
+                        {kid.allowance_splits && kid.allowance_splits.length > 0 && (
+                          <div className="flex gap-2 mt-1.5">
+                            {kid.allowance_splits.map((split) => {
+                              const colors = getSplitColor(split.split_key);
+                              return (
+                                <span key={split.split_key} className={`text-xs px-1.5 py-0.5 rounded ${colors.bg} ${colors.text}`}>
+                                  {formatCurrency(split.balance)}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
                       </button>
                       <button
                         onClick={(e) => {
@@ -793,9 +807,23 @@ export default function KidsPage() {
                     <td className="px-4 py-3 text-right">
                       <button
                         onClick={() => openAllowanceModal(kid)}
-                        className="text-sm font-medium text-gray-900 px-2 py-1 rounded hover:bg-gray-100 active:scale-95 transition-all"
+                        className="text-sm px-2 py-1 rounded hover:bg-gray-100 active:scale-95 transition-all"
                       >
-                        {formatCurrency(getTotalSplitBalance(kid))}
+                        <span className="font-medium text-gray-900">
+                          {formatCurrency(getTotalSplitBalance(kid))}
+                        </span>
+                        {kid.allowance_splits && kid.allowance_splits.length > 0 && (
+                          <div className="flex gap-1.5 justify-end mt-1">
+                            {kid.allowance_splits.map((split) => {
+                              const colors = getSplitColor(split.split_key);
+                              return (
+                                <span key={split.split_key} className={`text-xs px-1.5 py-0.5 rounded ${colors.bg} ${colors.text}`}>
+                                  {formatCurrency(split.balance)}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
                       </button>
                     </td>
                     <td className="px-4 py-3 text-right">
