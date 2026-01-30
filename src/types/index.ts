@@ -63,4 +63,34 @@ export interface Kid {
   prat_points: number;
   created_at: string;
   updated_at: string;
+  // Populated when fetching with splits
+  allowance_splits?: AllowanceSplit[];
+}
+
+export interface AllowanceSplit {
+  id: string;
+  kid_id: string;
+  split_key: string;
+  balance: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AllowanceTransaction {
+  id: string;
+  kid_id: string;
+  split_key: string;
+  amount: number;
+  transaction_type: 'deposit' | 'withdrawal';
+  description?: string;
+  created_by?: string;
+  created_at: string;
+  // Populated when joining with users
+  created_by_name?: string;
+}
+
+export interface AllowanceSplitConfig {
+  key: string;
+  name: string;
+  percentage: number;
 }

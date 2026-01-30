@@ -39,7 +39,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Kid not found" }, { status: 404 });
   }
 
-  return NextResponse.json({ kid });
+  // Fetch allowance splits for this kid
+  const { data: splits } = await supabase
+    .from("allowance_splits")
+    .select("*")
+    .eq("kid_id", id);
+
+  return NextResponse.json({
+    kid: {
+      ...kid,
+      allowance_splits: splits || [],
+    },
+  });
 }
 
 export async function PUT(request: NextRequest, { params }: RouteParams) {

@@ -36,7 +36,43 @@ export async function GET() {
     );
   }
 
-  return NextResponse.json({ kids });
+  // Fetch allowance splits for all kids
+  interface AllowanceSplitRow {
+    id: string;
+    kid_id: string;
+    split_key: string;
+    balance: number;
+    created_at: string;
+    updated_at: string;
+  }
+
+  const kidIds = kids?.map((k) => k.id) || [];
+  let splitsMap: Record<string, AllowanceSplitRow[]> = {};
+
+  if (kidIds.length > 0) {
+    const { data: splits } = await supabase
+      .from("allowance_splits")
+      .select("*")
+      .in("kid_id", kidIds);
+
+    if (splits) {
+      splitsMap = splits.reduce((acc, split) => {
+        if (!acc[split.kid_id]) {
+          acc[split.kid_id] = [];
+        }
+        acc[split.kid_id].push(split);
+        return acc;
+      }, {} as Record<string, AllowanceSplitRow[]>);
+    }
+  }
+
+  // Attach splits to each kid
+  const kidsWithSplits = kids?.map((kid) => ({
+    ...kid,
+    allowance_splits: splitsMap[kid.id] || [],
+  }));
+
+  return NextResponse.json({ kids: kidsWithSplits });
 }
 
 export async function POST(request: NextRequest) {
