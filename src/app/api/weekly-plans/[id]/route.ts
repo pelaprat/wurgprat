@@ -90,7 +90,7 @@ export async function GET(
 
   // Group event assignments by event_id
   const eventAssignmentsMap = new Map<string, Array<{ id: string; name: string; email: string }>>();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   (eventAssignments || []).forEach((assignment: any) => {
     if (!eventAssignmentsMap.has(assignment.event_id)) {
       eventAssignmentsMap.set(assignment.event_id, []);

@@ -1,22 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createHmac } from "crypto";
 import { getServiceSupabase } from "@/lib/supabase";
-
-/**
- * Generate an HMAC token for email rating links.
- * Prevents users from guessing/tampering with URLs.
- */
-export function generateRatingToken(
-  recipeId: string,
-  userId: string,
-  rating: number
-): string {
-  const secret = process.env.CRON_SECRET || process.env.NEXTAUTH_SECRET || "";
-  return createHmac("sha256", secret)
-    .update(`${recipeId}:${userId}:${rating}`)
-    .digest("hex")
-    .slice(0, 16);
-}
+import { generateRatingToken } from "@/utils/rating-token";
 
 /**
  * GET /api/rate?recipe=ID&user=ID&rating=N&token=HMAC

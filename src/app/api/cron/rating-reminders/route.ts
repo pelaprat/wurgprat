@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { getServiceSupabase } from "@/lib/supabase";
 import { getTodayInTimezone, getCurrentHourInTimezone } from "@/utils/timezone";
-import { generateRatingToken } from "@/app/api/rate/route";
+import { generateRatingToken } from "@/utils/rating-token";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -119,7 +119,7 @@ export async function GET(request: NextRequest) {
 
       // Send emails for each unrated recipe/user combo
       for (const meal of meals) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
         const recipe = meal.recipes as any;
         if (!recipe?.id || !recipe?.name) continue;
 

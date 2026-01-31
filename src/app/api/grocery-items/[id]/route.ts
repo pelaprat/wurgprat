@@ -46,7 +46,7 @@ export async function PATCH(
   }
 
   // Check household ownership - Supabase returns nested objects for foreign key joins
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   const groceryListData = groceryItem.grocery_list as any;
   const weeklyPlanData = groceryListData?.weekly_plan;
   const householdId = weeklyPlanData?.household_id;

@@ -150,14 +150,14 @@ export async function GET() {
       meal_type: meal.meal_type,
       custom_meal_name: meal.custom_meal_name,
       assigned_user_id: meal.assigned_user_id,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       assigned_user: meal.assigned_user as any,
       recipe: meal.recipes,
     })),
     events: events || [],
     responsibilities: {
       cooking: userMealAssignments.map((meal) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  
         const recipe = meal.recipes as any;
         return {
           id: meal.id,

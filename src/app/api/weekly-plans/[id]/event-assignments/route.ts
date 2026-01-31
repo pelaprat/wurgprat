@@ -106,7 +106,7 @@ export async function PUT(
     console.error("Failed to fetch updated assignments:", fetchError);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   const assignedUsers = (updatedAssignments || []).map((a: any) => a.user).filter(Boolean);
 
   return NextResponse.json({

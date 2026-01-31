@@ -43,7 +43,7 @@ export async function PATCH(
     return NextResponse.json({ error: "Meal not found" }, { status: 404 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   const weeklyPlan = meal.weekly_plan as any;
   if (weeklyPlan?.household_id !== user.household_id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
@@ -77,7 +77,7 @@ export async function PATCH(
     .single();
 
   // Build update object
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   const updateData: any = {};
   if (assigned_user_id !== undefined) {
     updateData.assigned_user_id = assigned_user_id || null;
@@ -115,7 +115,7 @@ export async function PATCH(
   let calendarSynced = false;
   if (currentMeal) {
     const accessToken = session.accessToken as string | undefined;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  
     const weeklyPlanData = currentMeal.weekly_plan as any;
     const householdId = weeklyPlanData?.household_id;
 
@@ -156,10 +156,10 @@ export async function PATCH(
 
             // If assigned user changed, update the event title
             if (assigned_user_id !== undefined) {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            
               const recipeName = (currentMeal.recipes as any)?.name;
               const mealName = recipeName || currentMeal.custom_meal_name || "Dinner";
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            
               const assignedUser = updatedMeal.assigned_user as any;
               const assignedUserName = assignedUser?.name;
 
@@ -173,10 +173,10 @@ export async function PATCH(
             }
           } else if (day !== undefined && day !== currentMeal.day && weeklyPlanData?.week_of) {
             // Meal has no calendar event yet — create one on the new day
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          
             const recipeName = (currentMeal.recipes as any)?.name;
             const mealName = recipeName || currentMeal.custom_meal_name || "Dinner";
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          
             const assignedUser = updatedMeal.assigned_user as any;
             const assignedUserName = assignedUser?.name;
             const newDate = calculateDateForDay(weeklyPlanData.week_of, day);
