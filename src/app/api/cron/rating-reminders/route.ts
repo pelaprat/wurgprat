@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { getServiceSupabase } from "@/lib/supabase";
-import { getTodayInTimezone, getCurrentHourInTimezone } from "@/utils/timezone";
+import { getTodayInTimezone } from "@/utils/timezone";
 import { generateRatingToken } from "@/utils/rating-token";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -25,20 +25,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Failed to fetch households" }, { status: 500 });
   }
 
-  // Allow bypassing the time filter with ?force=true
-  const force = request.nextUrl.searchParams.get("force") === "true";
-
-  // Filter to households where local time is 9pm (unless forced)
-  const targetHouseholds = force
-    ? households
-    : households.filter((h) => {
-        const tz = h.timezone || "America/New_York";
-        const hour = getCurrentHourInTimezone(tz);
-        return hour === 21;
-      });
+  // Cron runs once daily at 9pm CT (3am UTC) via vercel.json.
+  // All households get checked. Use ?force=true for local testing.
+  const targetHouseholds = households;
 
   if (targetHouseholds.length === 0) {
-    return NextResponse.json({ message: "No households at 9pm", emailsSent: 0 });
+    return NextResponse.json({ message: "No households found", emailsSent: 0 });
   }
 
   let totalEmailsSent = 0;
