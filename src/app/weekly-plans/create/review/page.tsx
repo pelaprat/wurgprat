@@ -989,37 +989,6 @@ export default function ReviewPage() {
         </p>
       </div>
 
-      {/* Progress indicator - 4 steps */}
-      <div className="flex items-center gap-2 mb-6">
-        <div className="flex items-center">
-          <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center text-sm font-medium">
-            1
-          </div>
-          <span className="ml-2 text-sm font-medium text-gray-900">Meals</span>
-        </div>
-        <div className="flex-1 h-0.5 bg-gray-200 mx-2"></div>
-        <div className="flex items-center">
-          <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-sm font-medium">
-            2
-          </div>
-          <span className="ml-2 text-sm text-gray-500">Staples</span>
-        </div>
-        <div className="flex-1 h-0.5 bg-gray-200 mx-2"></div>
-        <div className="flex items-center">
-          <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-sm font-medium">
-            3
-          </div>
-          <span className="ml-2 text-sm text-gray-500">Events</span>
-        </div>
-        <div className="flex-1 h-0.5 bg-gray-200 mx-2"></div>
-        <div className="flex items-center">
-          <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-sm font-medium">
-            4
-          </div>
-          <span className="ml-2 text-sm text-gray-500">Groceries</span>
-        </div>
-      </div>
-
       {/* Week selector */}
       <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
         <label className="block text-sm font-medium text-gray-700 mb-2">
