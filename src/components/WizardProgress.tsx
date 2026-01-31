@@ -67,7 +67,7 @@ export default function WizardProgress({ steps, currentStep }: WizardProgressPro
 
                   {/* Step label */}
                   <span
-                    className={`ml-3 text-sm font-medium whitespace-nowrap ${
+                    className={`relative z-10 ml-3 text-sm font-medium whitespace-nowrap ${
                       isCompleted || isCurrent ? "text-gray-900" : "text-gray-500"
                     }`}
                   >

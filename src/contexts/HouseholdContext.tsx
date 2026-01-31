@@ -8,7 +8,7 @@ import {
   useCallback,
   ReactNode,
 } from "react";
-import { useSession } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
 import { getBrowserTimezone } from "@/constants/timezones";
 
 interface HouseholdContextType {
@@ -56,9 +56,14 @@ export function HouseholdProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (status === "authenticated" && session?.user?.email) {
+      // If the Google refresh token is invalid, force re-authentication
+      if (session.error === "RefreshAccessTokenError") {
+        signIn("google");
+        return;
+      }
       fetchHousehold();
     }
-  }, [status, session?.user?.email, fetchHousehold]);
+  }, [status, session?.user?.email, session?.error, fetchHousehold]);
 
   return (
     <HouseholdContext.Provider

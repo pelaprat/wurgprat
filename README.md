@@ -10,6 +10,7 @@ A web app for household management including meal planning, recipes, groceries, 
 - **Grocery Lists**: Auto-generate shopping lists from your meal plan
 - **Google Calendar Sync**: Meals appear on your shared calendar
 - **Google Drive Export**: Save grocery lists as Google Docs
+- **Rating Reminders**: Nightly email reminders to rate dinner recipes (via Resend)
 
 ## Tech Stack
 
@@ -18,6 +19,7 @@ A web app for household management including meal planning, recipes, groceries, 
 - **Database**: Supabase (PostgreSQL)
 - **Styling**: Tailwind CSS
 - **APIs**: Google Calendar, Google Drive
+- **Email**: Resend (transactional emails)
 - **Deployment**: Vercel
 
 ---
@@ -79,9 +81,15 @@ GOOGLE_CLIENT_SECRET=<from step 3>
 NEXT_PUBLIC_SUPABASE_URL=<from step 2>
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<from step 2>
 SUPABASE_SERVICE_ROLE_KEY=<from step 2>
+
+# Resend (for recipe rating reminder emails)
+RESEND_API_KEY=<from resend.com>
+
+# Cron secret (protects the cron endpoint)
+CRON_SECRET=<run: openssl rand -base64 32>
 ```
 
-Generate `NEXTAUTH_SECRET`:
+Generate secrets:
 ```bash
 openssl rand -base64 32
 ```
@@ -113,7 +121,15 @@ git push origin main
 3. Update `NEXTAUTH_URL` to your Vercel domain
 4. Deploy!
 
-### 3. Update Google OAuth
+### 3. Set Up Resend
+
+1. Go to [resend.com](https://resend.com) and create an account
+2. Add and verify your sending domain (e.g. `wurgprat.com`)
+3. Create an API key and add it as `RESEND_API_KEY` in Vercel
+
+A daily cron job runs at 9pm CT to email users who haven't rated tonight's dinner recipes. The cron schedule is configured in `vercel.json`.
+
+### 4. Update Google OAuth
 
 Go back to Google Cloud Console and add your production redirect URI:
 ```

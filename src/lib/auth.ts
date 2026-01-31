@@ -139,6 +139,9 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       // Send properties to the client
       session.accessToken = token.accessToken as string;
+      if (token.error) {
+        session.error = token.error as string;
+      }
 
       // Check if user has a household
       if (session.user?.email) {
