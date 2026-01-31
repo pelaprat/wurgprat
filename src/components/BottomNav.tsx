@@ -36,6 +36,10 @@ export default function BottomNav() {
 
   if (!session) return null;
 
+  // Hide bottom nav during the weekly plan creation wizard
+  // to avoid overlapping the wizard's own navigation buttons
+  if (pathname.startsWith("/weekly-plans/create")) return null;
+
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
     return pathname.startsWith(href);

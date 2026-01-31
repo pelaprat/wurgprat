@@ -1275,7 +1275,7 @@ export default function ReviewPage() {
       )}
 
       {/* Action buttons - sticky on mobile */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-4 pb-safe md:relative md:border-0 md:p-0 md:mt-8 z-20">
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-4 pb-6 md:relative md:border-0 md:p-0 md:mt-8 z-20">
         <div className="flex justify-between items-center max-w-4xl mx-auto">
           <Link
             href="/weekly-plans"

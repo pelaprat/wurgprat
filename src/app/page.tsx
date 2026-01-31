@@ -597,8 +597,8 @@ function HomeContent() {
             )}
           </div>
 
-          {/* Quick Actions Footer */}
-          <div className="mt-8 pt-6 border-t border-gray-200">
+          {/* Quick Actions Footer - hidden on mobile where BottomNav provides these links */}
+          <div className="hidden md:block mt-8 pt-6 border-t border-gray-200">
             <div className="flex items-center justify-center gap-6">
               <Link
                 href="/weekly-plans/create"

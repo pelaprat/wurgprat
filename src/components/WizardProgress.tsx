@@ -16,23 +16,30 @@ export default function WizardProgress({ steps, currentStep }: WizardProgressPro
 
   return (
     <div className="mb-6">
-      {/* Step indicator */}
       <nav aria-label="Progress">
         <ol className="flex items-center">
           {steps.map((step, index) => {
             const isCompleted = index < currentIndex;
             const isCurrent = index === currentIndex;
-            const isUpcoming = index > currentIndex;
 
             return (
               <li
                 key={step.id}
-                className={`relative ${index !== steps.length - 1 ? "flex-1 pr-8" : ""}`}
+                className={`relative ${index !== steps.length - 1 ? "flex-1" : ""}`}
               >
-                <div className="flex items-center">
+                {/* Connector line — between circles only */}
+                {index !== steps.length - 1 && (
+                  <div
+                    className={`absolute top-5 left-10 right-0 h-0.5 -translate-y-1/2 ${
+                      isCompleted ? "bg-emerald-600" : "bg-gray-300"
+                    }`}
+                  />
+                )}
+
+                <div className="relative flex flex-col items-start">
                   {/* Step circle */}
                   <div
-                    className={`relative flex items-center justify-center w-10 h-10 rounded-full border-2 transition-colors ${
+                    className={`relative z-10 flex items-center justify-center w-10 h-10 rounded-full border-2 transition-colors ${
                       isCompleted
                         ? "bg-emerald-600 border-emerald-600"
                         : isCurrent
@@ -65,25 +72,14 @@ export default function WizardProgress({ steps, currentStep }: WizardProgressPro
                     )}
                   </div>
 
-                  {/* Step label */}
+                  {/* Step label — below the circle, not inline */}
                   <span
-                    className={`relative z-10 ml-3 text-sm font-medium whitespace-nowrap ${
+                    className={`mt-1.5 text-xs font-medium whitespace-nowrap ${
                       isCompleted || isCurrent ? "text-gray-900" : "text-gray-500"
                     }`}
                   >
                     {step.label}
                   </span>
-
-                  {/* Connector line */}
-                  {index !== steps.length - 1 && (
-                    <div className="absolute top-5 left-10 w-full h-0.5 -translate-y-1/2">
-                      <div
-                        className={`h-full transition-colors ${
-                          isCompleted ? "bg-emerald-600" : "bg-gray-300"
-                        }`}
-                      />
-                    </div>
-                  )}
                 </div>
               </li>
             );
