@@ -72,6 +72,8 @@ export default function RecipeDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [isQueued, setIsQueued] = useState(false);
   const [queueItemId, setQueueItemId] = useState<string | null>(null);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editName, setEditName] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [importDebug, setImportDebug] = useState<string | null>(null);
@@ -192,6 +194,33 @@ export default function RecipeDetailPage() {
       }
     } catch {
       showToast("Failed to update queue", "error");
+    }
+  };
+
+  const handleSaveName = async () => {
+    const trimmed = editName.trim();
+    if (!trimmed || trimmed === recipe?.name) {
+      setIsEditingName(false);
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/recipes/${params.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmed }),
+      });
+
+      if (response.ok) {
+        setRecipe((prev) => (prev ? { ...prev, name: trimmed } : prev));
+        showToast("Recipe renamed");
+      } else {
+        showToast("Failed to rename recipe", "error");
+      }
+    } catch {
+      showToast("Failed to rename recipe", "error");
+    } finally {
+      setIsEditingName(false);
     }
   };
 
@@ -536,7 +565,34 @@ export default function RecipeDetailPage() {
           &larr; Back to recipes
         </Link>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{recipe.name}</h1>
+          {isEditingName ? (
+            <input
+              type="text"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              onBlur={handleSaveName}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSaveName();
+                if (e.key === "Escape") setIsEditingName(false);
+              }}
+              className="text-2xl font-bold text-gray-900 w-full bg-transparent border-b-2 border-emerald-500 outline-none py-0.5"
+              autoFocus
+            />
+          ) : (
+            <h1
+              className="text-2xl font-bold text-gray-900 cursor-pointer hover:text-emerald-700 transition-colors group inline-flex items-center gap-2"
+              onClick={() => {
+                setEditName(recipe.name);
+                setIsEditingName(true);
+              }}
+              title="Click to rename"
+            >
+              {recipe.name}
+              <svg className="w-4 h-4 text-gray-300 group-hover:text-emerald-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+              </svg>
+            </h1>
+          )}
           {recipe.source && (
             <p className="text-gray-600">
               {recipe.source_url ? (
