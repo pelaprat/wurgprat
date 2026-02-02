@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { PageHeaderSkeleton, RecipeCardSkeleton } from "@/components/Skeleton";
+import { useToast } from "@/components/Toast";
 
 interface Recipe {
   id: string;
@@ -30,17 +31,69 @@ type SortOrder = "asc" | "desc";
 
 export default function RecipesPage() {
   const { data: session } = useSession();
+  const { showToast } = useToast();
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
+  const [queuedRecipeIds, setQueuedRecipeIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (session) {
       fetchRecipes();
+      fetchQueuedRecipes();
     }
   }, [session]);
+
+  const fetchQueuedRecipes = async () => {
+    try {
+      const response = await fetch("/api/recipe-queue");
+      if (response.ok) {
+        const data = await response.json();
+        const ids = new Set<string>((data.items || []).map((item: { recipe_id: string }) => item.recipe_id));
+        setQueuedRecipeIds(ids);
+      }
+    } catch (error) {
+      console.error("Failed to fetch recipe queue:", error);
+    }
+  };
+
+  const handleToggleQueue = useCallback(async (e: React.MouseEvent, recipeId: string) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const isQueued = queuedRecipeIds.has(recipeId);
+
+    try {
+      if (isQueued) {
+        const response = await fetch(`/api/recipe-queue/by-recipe/${recipeId}`, { method: "DELETE" });
+        if (response.ok) {
+          setQueuedRecipeIds((prev) => {
+            const next = new Set(prev);
+            next.delete(recipeId);
+            return next;
+          });
+          showToast("Removed from queue");
+        } else {
+          showToast("Failed to remove from queue", "error");
+        }
+      } else {
+        const response = await fetch("/api/recipe-queue", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ recipeId }),
+        });
+        if (response.ok) {
+          setQueuedRecipeIds((prev) => new Set(prev).add(recipeId));
+          showToast("Added to queue");
+        } else {
+          showToast("Failed to add to queue", "error");
+        }
+      }
+    } catch {
+      showToast("Failed to update queue", "error");
+    }
+  }, [queuedRecipeIds, showToast]);
 
   const fetchRecipes = async () => {
     try {
@@ -274,9 +327,26 @@ export default function RecipesPage() {
                         )}
                       </div>
                     </div>
-                    <svg className="w-5 h-5 text-gray-400 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
+                    <div className="flex items-center gap-1 flex-shrink-0 mt-1">
+                      <button
+                        onClick={(e) => handleToggleQueue(e, recipe.id)}
+                        className="p-1 rounded-full hover:bg-gray-100 transition-colors"
+                        title={queuedRecipeIds.has(recipe.id) ? "Remove from queue" : "Eat Soon"}
+                      >
+                        {queuedRecipeIds.has(recipe.id) ? (
+                          <svg className="w-5 h-5 text-amber-500" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7V7z" />
+                          </svg>
+                        ) : (
+                          <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        )}
+                      </button>
+                      <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
                   </div>
                 </Link>
               );
@@ -308,6 +378,9 @@ export default function RecipesPage() {
                     onClick={() => handleSort("average_rating")}
                   >
                     Rating <SortIcon field="average_rating" />
+                  </th>
+                  <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700 w-16">
+                    Queue
                   </th>
                 </tr>
               </thead>
@@ -352,6 +425,23 @@ export default function RecipesPage() {
                     </td>
                     <td className="px-4 py-3 text-sm">
                       {renderStars(recipe.average_rating)}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        onClick={(e) => handleToggleQueue(e, recipe.id)}
+                        className="p-1 rounded-full hover:bg-gray-100 transition-colors mx-auto"
+                        title={queuedRecipeIds.has(recipe.id) ? "Remove from queue" : "Eat Soon"}
+                      >
+                        {queuedRecipeIds.has(recipe.id) ? (
+                          <svg className="w-5 h-5 text-amber-500" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7V7z" />
+                          </svg>
+                        ) : (
+                          <svg className="w-5 h-5 text-gray-400 hover:text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        )}
+                      </button>
                     </td>
                   </tr>
                 ))}

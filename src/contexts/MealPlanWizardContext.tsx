@@ -23,8 +23,6 @@ export interface ProposedMeal {
   recipeName: string;
   recipeTimeRating?: number; // 1-5 scale
   customMealName?: string;
-  aiReasoning?: string; // Why AI chose this
-  isAiSuggested: boolean;
   sortOrder?: number; // Order within the day
   assignedUserId?: string; // User responsible for cooking
 }
@@ -86,12 +84,7 @@ export interface MealPlanWizardState {
   // Phase 3 data
   groceryItems: GroceryItemDraft[];
 
-  // AI explanation
-  aiExplanation?: string;
-
   // Loading states
-  isGenerating: boolean;
-  isReplacingMeal: boolean;
   isGeneratingGroceries: boolean;
   isFinalizing: boolean;
 }
@@ -112,7 +105,6 @@ interface MealPlanWizardContextType extends MealPlanWizardState {
   addMealToDay: (day: number, date: string, meal: Omit<ProposedMeal, "mealId" | "day" | "date">) => void;
   swapMeals: (day1: number, day2: number) => void;
   swapMealsById: (mealId1: string, mealId2: string) => void;
-  setAiExplanation: (explanation: string) => void;
   getMealsForDay: (day: number) => ProposedMeal[];
 
   // Phase 2.5 actions (event assignments)
@@ -134,8 +126,6 @@ interface MealPlanWizardContextType extends MealPlanWizardState {
   toggleGroceryItemChecked: (id: string) => void;
 
   // Loading state setters
-  setIsGenerating: (value: boolean) => void;
-  setIsReplacingMeal: (value: boolean) => void;
   setIsGeneratingGroceries: (value: boolean) => void;
   setIsFinalizing: (value: boolean) => void;
 
@@ -163,9 +153,6 @@ const initialState: MealPlanWizardState = {
   eventAssignments: [],
   stapleItems: [],
   groceryItems: [],
-  aiExplanation: undefined,
-  isGenerating: false,
-  isReplacingMeal: false,
   isGeneratingGroceries: false,
   isFinalizing: false,
 };
@@ -211,7 +198,6 @@ export function MealPlanWizardProvider({ children }: { children: ReactNode }) {
           stapleItems: state.stapleItems,
           groceryItems: state.groceryItems,
           eventAssignments: state.eventAssignments,
-          aiExplanation: state.aiExplanation,
           timestamp: Date.now()
         }));
       } catch {
@@ -228,7 +214,6 @@ export function MealPlanWizardProvider({ children }: { children: ReactNode }) {
     state.stapleItems,
     state.groceryItems,
     state.eventAssignments,
-    state.aiExplanation
   ]);
 
   // Restore session from localStorage
@@ -246,7 +231,6 @@ export function MealPlanWizardProvider({ children }: { children: ReactNode }) {
           stapleItems: parsed.stapleItems || [],
           groceryItems: parsed.groceryItems || [],
           eventAssignments: parsed.eventAssignments || [],
-          aiExplanation: parsed.aiExplanation,
         }));
       }
     } catch {
@@ -367,13 +351,11 @@ export function MealPlanWizardProvider({ children }: { children: ReactNode }) {
         ...meal2,
         day: meal1.day,
         date: meal1.date,
-        isAiSuggested: false, // Mark as user-modified
       };
       meals[meal2Index] = {
         ...meal1,
         day: meal2.day,
         date: meal2.date,
-        isAiSuggested: false, // Mark as user-modified
       };
 
       return { ...prev, proposedMeals: meals };
@@ -398,7 +380,6 @@ export function MealPlanWizardProvider({ children }: { children: ReactNode }) {
         day: meal1.day,
         date: meal1.date,
         sortOrder: meal1.sortOrder,
-        isAiSuggested: false,
       };
       meals[meal2Index] = {
         ...meal1,
@@ -406,15 +387,10 @@ export function MealPlanWizardProvider({ children }: { children: ReactNode }) {
         day: meal2.day,
         date: meal2.date,
         sortOrder: meal2.sortOrder,
-        isAiSuggested: false,
       };
 
       return { ...prev, proposedMeals: meals };
     });
-  }, []);
-
-  const setAiExplanation = useCallback((explanation: string) => {
-    setState((prev) => ({ ...prev, aiExplanation: explanation }));
   }, []);
 
   // Phase 2.5 actions (event assignments)
@@ -547,14 +523,6 @@ export function MealPlanWizardProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Loading state setters
-  const setIsGenerating = useCallback((value: boolean) => {
-    setState((prev) => ({ ...prev, isGenerating: value }));
-  }, []);
-
-  const setIsReplacingMeal = useCallback((value: boolean) => {
-    setState((prev) => ({ ...prev, isReplacingMeal: value }));
-  }, []);
-
   const setIsGeneratingGroceries = useCallback((value: boolean) => {
     setState((prev) => ({ ...prev, isGeneratingGroceries: value }));
   }, []);
@@ -590,7 +558,6 @@ export function MealPlanWizardProvider({ children }: { children: ReactNode }) {
         addMealToDay,
         swapMeals,
         swapMealsById,
-        setAiExplanation,
         getMealsForDay,
         setEventAssignments,
         updateEventAssignment,
@@ -604,8 +571,6 @@ export function MealPlanWizardProvider({ children }: { children: ReactNode }) {
         removeGroceryItem,
         addGroceryItem,
         toggleGroceryItemChecked,
-        setIsGenerating,
-        setIsReplacingMeal,
         setIsGeneratingGroceries,
         setIsFinalizing,
         resetWizard,

@@ -45,7 +45,6 @@ interface Meal {
   meal_type: string;
   custom_meal_name?: string;
   is_leftover: boolean;
-  is_ai_suggested?: boolean;
   notes?: string;
   recipes?: Recipe;
   assigned_user_id?: string;

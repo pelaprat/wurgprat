@@ -10,7 +10,7 @@ interface ProposedMeal {
   recipeId?: string;
   recipeName: string;
   customMealName?: string;
-  isAiSuggested: boolean;
+
   assignedUserId?: string;
 }
 
@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
       day: meal.day,
       meal_type: "dinner" as const,
       custom_meal_name: meal.customMealName || null,
-      is_ai_suggested: meal.isAiSuggested,
+
       assigned_user_id: meal.assignedUserId || null,
       created_by: user.id,
     }));
@@ -374,6 +374,24 @@ export async function POST(request: NextRequest) {
           console.error("Failed to create event assignments:", assignmentsError);
           // Don't fail the whole operation, event assignments are secondary
         }
+      }
+    }
+
+    // 6. Auto-remove queued recipes that were planned
+    const plannedRecipeIds = meals
+      .filter((m) => m.recipeId)
+      .map((m) => m.recipeId as string);
+
+    if (plannedRecipeIds.length > 0) {
+      const { error: queueError } = await supabase
+        .from("recipe_queue")
+        .delete()
+        .eq("household_id", user.household_id)
+        .in("recipe_id", plannedRecipeIds);
+
+      if (queueError) {
+        console.error("Failed to clear queue items:", queueError);
+        // Don't fail the whole operation, queue cleanup is secondary
       }
     }
 

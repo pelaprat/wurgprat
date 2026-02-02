@@ -170,7 +170,7 @@ create table meals (
   custom_meal_name text,
   is_leftover boolean default false,
   leftover_source_id uuid references meals(id),
-  is_ai_suggested boolean default false,
+
   notes text,
   calendar_event_id text,
   assigned_user_id uuid references users(id),
@@ -184,7 +184,7 @@ create table meals (
 
 comment on column meals.day is 'Day of week (1-7, where 1 = first day of week)';
 comment on column meals.leftover_source_id is 'Which meal is this leftover from?';
-comment on column meals.is_ai_suggested is 'Whether this meal was suggested by AI vs manually selected';
+
 comment on column meals.assigned_user_id is 'User responsible for cooking this meal';
 
 -- Grocery List table (shopping list for a weekly plan)
@@ -306,59 +306,59 @@ alter table allowance_transactions enable row level security;
 -- Helper function to get current user's household_id
 create or replace function get_user_household_id()
 returns uuid as $$
-  select household_id from users where email = auth.jwt()->>'email'
-$$ language sql security definer;
+  select household_id from public.users where email = auth.jwt()->>'email'
+$$ language sql security definer set search_path = public;
 
 -- Households: users can view their own household
 create policy "Users can view own household" on households
-  for select using (id = get_user_household_id());
+  for select using (id = (select get_user_household_id()));
 
 -- Users: can view other users in their household
 create policy "Users can view household members" on users
-  for select using (household_id = get_user_household_id());
+  for select using (household_id = (select get_user_household_id()));
 
 -- Stores: users can manage stores in their household
 create policy "Users can manage household stores" on stores
-  for all using (household_id = get_user_household_id());
+  for all using (household_id = (select get_user_household_id()));
 
 -- Events: users can manage events in their household
 create policy "Users can manage household events" on events
-  for all using (household_id = get_user_household_id());
+  for all using (household_id = (select get_user_household_id()));
 
 -- Ingredients: users can manage ingredients in their household
 create policy "Users can manage household ingredients" on ingredients
-  for all using (household_id = get_user_household_id());
+  for all using (household_id = (select get_user_household_id()));
 
 -- Recipes: users can manage recipes in their household
 create policy "Users can manage household recipes" on recipes
-  for all using (household_id = get_user_household_id());
+  for all using (household_id = (select get_user_household_id()));
 
 -- Recipe Ratings: users can manage ratings for recipes in their household
 create policy "Users can manage recipe ratings" on recipe_ratings
   for all using (
-    recipe_id in (select id from recipes where household_id = get_user_household_id())
+    recipe_id in (select id from recipes where household_id = (select get_user_household_id()))
   );
 
 -- Recipe Ingredients: users can manage recipe ingredients for their recipes
 create policy "Users can manage recipe ingredients" on recipe_ingredients
   for all using (
-    recipe_id in (select id from recipes where household_id = get_user_household_id())
+    recipe_id in (select id from recipes where household_id = (select get_user_household_id()))
   );
 
 -- Weekly Plan: users can manage weekly plans in their household
 create policy "Users can manage household weekly plans" on weekly_plan
-  for all using (household_id = get_user_household_id());
+  for all using (household_id = (select get_user_household_id()));
 
 -- Meals: users can manage meals in their weekly plans
 create policy "Users can manage meals" on meals
   for all using (
-    weekly_plan_id in (select id from weekly_plan where household_id = get_user_household_id())
+    weekly_plan_id in (select id from weekly_plan where household_id = (select get_user_household_id()))
   );
 
 -- Grocery List: users can manage grocery lists in their weekly plans
 create policy "Users can manage grocery lists" on grocery_list
   for all using (
-    weekly_plan_id in (select id from weekly_plan where household_id = get_user_household_id())
+    weekly_plan_id in (select id from weekly_plan where household_id = (select get_user_household_id()))
   );
 
 -- Grocery Items: users can manage grocery items in their grocery lists
@@ -367,30 +367,30 @@ create policy "Users can manage grocery items" on grocery_items
     grocery_list_id in (
       select gl.id from grocery_list gl
       join weekly_plan wp on gl.weekly_plan_id = wp.id
-      where wp.household_id = get_user_household_id()
+      where wp.household_id = (select get_user_household_id())
     )
   );
 
 -- Kids: users can manage kids in their household
 create policy "Users can manage household kids" on kids
-  for all using (household_id = get_user_household_id());
+  for all using (household_id = (select get_user_household_id()));
 
 -- Allowance Splits: users can manage splits for kids in their household
 create policy "Users can manage allowance splits" on allowance_splits
   for all using (
-    kid_id in (select id from kids where household_id = get_user_household_id())
+    kid_id in (select id from kids where household_id = (select get_user_household_id()))
   );
 
 -- Allowance Transactions: users can manage transactions for kids in their household
 create policy "Users can manage allowance transactions" on allowance_transactions
   for all using (
-    kid_id in (select id from kids where household_id = get_user_household_id())
+    kid_id in (select id from kids where household_id = (select get_user_household_id()))
   );
 
 -- Weekly Plan Event Assignments: users can manage event assignments in their weekly plans
 create policy "Users can manage event assignments" on weekly_plan_event_assignments
   for all using (
-    weekly_plan_id in (select id from weekly_plan where household_id = get_user_household_id())
+    weekly_plan_id in (select id from weekly_plan where household_id = (select get_user_household_id()))
   );
 
 -- ============================================================================
@@ -437,7 +437,7 @@ begin
   new.updated_at = now();
   return new;
 end;
-$$ language plpgsql;
+$$ language plpgsql set search_path = public;
 
 create trigger recipes_updated_at
   before update on recipes
@@ -458,3 +458,34 @@ create trigger kids_updated_at
 create trigger allowance_splits_updated_at
   before update on allowance_splits
   for each row execute function update_updated_at();
+
+-- Recipe Queue (users mark recipes they want to eat soon)
+create table recipe_queue (
+  id uuid default uuid_generate_v4() primary key,
+  household_id uuid references households(id) not null,
+  user_id uuid references users(id) not null,
+  recipe_id uuid references recipes(id) on delete cascade not null,
+  notes text,
+  created_at timestamptz default now() not null,
+  unique(user_id, recipe_id)
+);
+
+alter table recipe_queue enable row level security;
+
+create policy "Users can read household queue" on recipe_queue
+  for select using (household_id = (select get_user_household_id()));
+
+create policy "Users can insert own queue items" on recipe_queue
+  for insert with check (user_id = auth.uid() and household_id = (select get_user_household_id()));
+
+create policy "Users can delete own queue items" on recipe_queue
+  for delete using (user_id = auth.uid());
+
+create policy "Users can update own queue items" on recipe_queue
+  for update using (user_id = auth.uid());
+
+create index idx_recipe_queue_household on recipe_queue(household_id);
+create index idx_recipe_queue_user on recipe_queue(user_id);
+
+comment on table recipe_queue is 'Recipes users want to eat soon - surfaces during weekly plan creation';
+comment on column recipe_queue.notes is 'Optional note like "for date night" or "when kids are away"';

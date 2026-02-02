@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { RecipeDetailSkeleton } from "@/components/Skeleton";
+import { useToast } from "@/components/Toast";
 
 interface Ingredient {
   id: string;
@@ -65,9 +66,12 @@ export default function RecipeDetailPage() {
   const { data: session } = useSession();
   const params = useParams();
   const router = useRouter();
+  const { showToast } = useToast();
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isQueued, setIsQueued] = useState(false);
+  const [queueItemId, setQueueItemId] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [importDebug, setImportDebug] = useState<string | null>(null);
@@ -135,6 +139,61 @@ export default function RecipeDetailPage() {
 
     fetchRatings();
   }, [session, params.id]);
+
+  // Fetch queue status
+  useEffect(() => {
+    const fetchQueueStatus = async () => {
+      if (!params.id || !session) return;
+
+      try {
+        const response = await fetch(`/api/recipe-queue/by-recipe/${params.id}`);
+        if (response.ok) {
+          const data = await response.json();
+          setIsQueued(data.queued);
+          setQueueItemId(data.itemId);
+        }
+      } catch (err) {
+        console.error("Failed to fetch queue status:", err);
+      }
+    };
+
+    fetchQueueStatus();
+  }, [session, params.id]);
+
+  const handleToggleQueue = async () => {
+    if (!params.id) return;
+
+    try {
+      if (isQueued) {
+        const response = await fetch(`/api/recipe-queue/by-recipe/${params.id}`, {
+          method: "DELETE",
+        });
+        if (response.ok) {
+          setIsQueued(false);
+          setQueueItemId(null);
+          showToast("Removed from queue");
+        } else {
+          showToast("Failed to remove from queue", "error");
+        }
+      } else {
+        const response = await fetch("/api/recipe-queue", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ recipeId: params.id }),
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setIsQueued(true);
+          setQueueItemId(data.item?.id || null);
+          showToast("Added to queue");
+        } else {
+          showToast("Failed to add to queue", "error");
+        }
+      }
+    } catch {
+      showToast("Failed to update queue", "error");
+    }
+  };
 
   const handleDelete = async () => {
     if (!confirm("Are you sure you want to delete this recipe?")) return;
@@ -882,6 +941,30 @@ export default function RecipeDetailPage() {
                   </button>
                 </>
               )}
+              <button
+                onClick={handleToggleQueue}
+                className={`w-full px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-2 ${
+                  isQueued
+                    ? "bg-amber-100 text-amber-700 border border-amber-300 hover:bg-amber-200"
+                    : "bg-amber-500 text-white hover:bg-amber-600"
+                }`}
+              >
+                {isQueued ? (
+                  <>
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7V7z" />
+                    </svg>
+                    Remove from Queue
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Eat Soon
+                  </>
+                )}
+              </button>
               <button
                 onClick={handleDelete}
                 className="w-full px-4 py-2 text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition-colors"

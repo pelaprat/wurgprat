@@ -10,6 +10,7 @@ import type { Kid } from "@/types";
 const weeklyPlanningLinks = [
   { href: "/weekly-plans", label: "Weekly Plans" },
   { href: "/recipes", label: "Recipes" },
+  { href: "/queue", label: "Queue" },
   { href: "/ingredients", label: "Ingredients" },
   { href: "/stores", label: "Stores" },
   { href: "/departments", label: "Departments" },

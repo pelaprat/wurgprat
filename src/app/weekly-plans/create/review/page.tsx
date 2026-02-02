@@ -93,20 +93,28 @@ interface Recipe {
   cuisine: string | null;
 }
 
+interface QueueItem {
+  id: string;
+  recipe_id: string;
+  notes: string | null;
+  created_at: string;
+  user_id: string;
+  recipes: { id: string; name: string; cuisine: string | null; time_rating: number | null; source_url: string | null };
+  users: { id: string; name: string };
+}
+
 interface DraggableMealProps {
   meal: ProposedMeal;
-  onReplace: (mealId: string) => void;
   onRemove: (mealId: string) => void;
   onAssign: (mealId: string, userId: string | undefined) => void;
   onMove: (meal: ProposedMeal) => void;
   onPickRecipe: (mealId: string) => void;
-  isReplacing: boolean;
   canRemove: boolean;
   householdMembers: HouseholdMember[];
   isMobile: boolean;
 }
 
-function DraggableMeal({ meal, onReplace, onRemove, onAssign, onMove, onPickRecipe, isReplacing, canRemove, householdMembers, isMobile }: DraggableMealProps) {
+function DraggableMeal({ meal, onRemove, onAssign, onMove, onPickRecipe, canRemove, householdMembers, isMobile }: DraggableMealProps) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `meal-${meal.mealId}`,
     data: { mealId: meal.mealId, day: meal.day },
@@ -182,12 +190,6 @@ function DraggableMeal({ meal, onReplace, onRemove, onAssign, onMove, onPickReci
                 </span>
               )}
             </div>
-            {meal.aiReasoning && (
-              <p className="text-xs text-gray-500 mt-2 italic">
-                &quot;{meal.aiReasoning}&quot;
-              </p>
-            )}
-
             {/* User assignment */}
             <div className="mt-2 flex items-center gap-2">
               <label className="text-xs text-gray-500">Cook:</label>
@@ -229,30 +231,6 @@ function DraggableMeal({ meal, onReplace, onRemove, onAssign, onMove, onPickReci
                 d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
               />
             </svg>
-          </button>
-          <button
-            onClick={() => onReplace(meal.mealId)}
-            disabled={isReplacing}
-            className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-            title="Get new AI suggestion"
-          >
-            {isReplacing ? (
-              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-600"></div>
-            ) : (
-              <svg
-                className="w-3 h-3"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                />
-              </svg>
-            )}
           </button>
           {canRemove && (
             <button
@@ -316,18 +294,14 @@ interface DaySlotProps {
   date: string;
   events: Event[];
   meals: ProposedMeal[];
-  onReplace: (mealId: string) => void;
   onRemove: (mealId: string) => void;
   onAssign: (mealId: string, userId: string | undefined) => void;
   onMove: (meal: ProposedMeal) => void;
   onPickRecipe: (mealId: string) => void;
-  onAddMealWithAI: (day: number, date: string) => void;
   onAddRecipe: (day: number, date: string, recipe: Recipe) => void;
-  replacingMealId: string | null;
   isDraggedOver: boolean;
   householdMembers: HouseholdMember[];
   isMobile: boolean;
-  isAddingMeal: boolean;
   recipes: Recipe[];
   usedRecipeIds: string[];
 }
@@ -337,18 +311,14 @@ function DaySlot({
   date,
   events,
   meals,
-  onReplace,
   onRemove,
   onAssign,
   onMove,
   onPickRecipe,
-  onAddMealWithAI,
   onAddRecipe,
-  replacingMealId,
   isDraggedOver,
   householdMembers,
   isMobile,
-  isAddingMeal,
   recipes,
   usedRecipeIds,
 }: DaySlotProps) {
@@ -435,12 +405,10 @@ function DaySlot({
               <DraggableMeal
                 key={meal.mealId}
                 meal={meal}
-                onReplace={onReplace}
                 onRemove={onRemove}
                 onAssign={onAssign}
                 onMove={onMove}
                 onPickRecipe={onPickRecipe}
-                isReplacing={replacingMealId === meal.mealId}
                 canRemove={true}
                 householdMembers={householdMembers}
                 isMobile={isMobile}
@@ -555,21 +523,6 @@ function DaySlot({
               </div>
             )}
 
-            {/* AI suggestion button */}
-            <button
-              onClick={() => onAddMealWithAI(day, date)}
-              disabled={isAddingMeal}
-              className="w-full mt-2 py-2.5 px-3 bg-purple-50 border border-purple-200 rounded-lg text-sm text-purple-700 hover:bg-purple-100 transition-colors flex items-center justify-center gap-1.5 min-h-[44px] disabled:opacity-50"
-            >
-              {isAddingMeal ? (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600"></div>
-              ) : (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-              )}
-              AI suggestion
-            </button>
           </div>
         )}
       </div>
@@ -584,16 +537,18 @@ export default function ReviewPage() {
   const { events: allEvents } = useEvents();
   const isMobile = useIsMobile();
 
-  const [replacingMealId, setReplacingMealId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeDragMealId, setActiveDragMealId] = useState<string | null>(null);
-  const [isAddingMeal, setIsAddingMeal] = useState(false);
   const [householdMembers, setHouseholdMembers] = useState<HouseholdMember[]>([]);
   const [movingMeal, setMovingMeal] = useState<ProposedMeal | null>(null);
   const [pickingRecipeForMealId, setPickingRecipeForMealId] = useState<string | null>(null);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [recipeSearch, setRecipeSearch] = useState("");
   const [existingPlans, setExistingPlans] = useState<ExistingPlan[]>([]);
+  const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
+  const [queueCurrentUserId, setQueueCurrentUserId] = useState<string | null>(null);
+  const [assignedQueueIds, setAssignedQueueIds] = useState<Set<string>>(new Set());
+  const [dayPickerQueueItem, setDayPickerQueueItem] = useState<QueueItem | null>(null);
 
   // Saturday options for dropdown
   const saturdayOptions = useMemo(() => getSaturdayOptions(), []);
@@ -665,6 +620,41 @@ export default function ReviewPage() {
       fetchRecipes();
     }
   }, [session]);
+
+  // Fetch recipe queue
+  useEffect(() => {
+    const fetchQueue = async () => {
+      try {
+        const response = await fetch("/api/recipe-queue");
+        if (response.ok) {
+          const data = await response.json();
+          setQueueItems(data.items || []);
+          setQueueCurrentUserId(data.currentUserId || null);
+        }
+      } catch (err) {
+        console.error("Failed to fetch recipe queue:", err);
+      }
+    };
+    if (session) {
+      fetchQueue();
+    }
+  }, [session]);
+
+  // Handle adding a queued recipe to a day
+  const handleAddQueueItemToDay = (queueItem: QueueItem, day: number) => {
+    const dates = getWeekDates();
+    const date = dates[day - 1];
+    if (!date) return;
+
+    wizard.addMealToDay(day, date, {
+      recipeId: queueItem.recipes.id,
+      recipeName: queueItem.recipes.name,
+      recipeTimeRating: queueItem.recipes.time_rating ?? undefined,
+    });
+
+    setAssignedQueueIds((prev) => new Set([...prev, queueItem.id]));
+    setDayPickerQueueItem(null);
+  };
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -740,61 +730,25 @@ export default function ReviewPage() {
         wizard.updateMealById(activeMealId, {
           day: overDay,
           date: newDate,
-          isAiSuggested: false,
         });
       }
     }
   };
 
-  // Handle replace meal
-  const handleReplaceMeal = async (mealId: string) => {
-    setReplacingMealId(mealId);
-    setError(null);
-    wizard.setIsReplacingMeal(true);
-
-    try {
-      const currentMeal = wizard.proposedMeals.find((m) => m.mealId === mealId);
-      if (!currentMeal) return;
-
-      const usedRecipeIds = wizard.proposedMeals
-        .filter((m) => m.recipeId)
-        .map((m) => m.recipeId);
-
-      const response = await fetch("/api/weekly-plans/suggest-replacement", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          day: currentMeal.day,
-          date: currentMeal.date,
-          currentRecipeId: currentMeal.recipeId,
-          excludeRecipeIds: usedRecipeIds,
-          events: getEventsForDay(currentMeal.date || ""),
-        }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to get replacement");
-      }
-
-      const data = await response.json();
-      wizard.updateMealById(mealId, {
-        recipeId: data.suggestion.recipeId,
-        recipeName: data.suggestion.recipeName,
-        recipeTimeRating: data.suggestion.recipeTimeRating,
-        aiReasoning: data.suggestion.aiReasoning,
-        isAiSuggested: true,
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
-    } finally {
-      setReplacingMealId(null);
-      wizard.setIsReplacingMeal(false);
-    }
-  };
-
   // Handle remove meal
   const handleRemoveMeal = (mealId: string) => {
+    // If this meal came from the queue, un-assign it so it reappears
+    const meal = wizard.proposedMeals.find((m) => m.mealId === mealId);
+    if (meal?.recipeId) {
+      const queueItem = queueItems.find((q) => q.recipes.id === meal.recipeId);
+      if (queueItem && assignedQueueIds.has(queueItem.id)) {
+        setAssignedQueueIds((prev) => {
+          const next = new Set(prev);
+          next.delete(queueItem.id);
+          return next;
+        });
+      }
+    }
     wizard.removeMeal(mealId);
   };
 
@@ -816,7 +770,6 @@ export default function ReviewPage() {
     wizard.updateMealById(movingMeal.mealId, {
       day: targetDay,
       date: newDate,
-      isAiSuggested: false,
     });
     setMovingMeal(null);
   };
@@ -834,8 +787,6 @@ export default function ReviewPage() {
       recipeId: recipe.id,
       recipeName: recipe.name,
       recipeTimeRating: recipe.time_rating ?? undefined,
-      aiReasoning: undefined,
-      isAiSuggested: false,
     });
     setPickingRecipeForMealId(null);
   };
@@ -846,7 +797,6 @@ export default function ReviewPage() {
       recipeId: recipe.id,
       recipeName: recipe.name,
       recipeTimeRating: recipe.time_rating ?? undefined,
-      isAiSuggested: false,
     });
   };
 
@@ -854,47 +804,6 @@ export default function ReviewPage() {
   const filteredRecipes = recipes.filter((recipe) =>
     recipe.name.toLowerCase().includes(recipeSearch.toLowerCase())
   );
-
-  // Handle add meal to day
-  const handleAddMeal = async (day: number, date: string) => {
-    setIsAddingMeal(true);
-    setError(null);
-
-    try {
-      const usedRecipeIds = wizard.proposedMeals
-        .filter((m) => m.recipeId)
-        .map((m) => m.recipeId);
-
-      const response = await fetch("/api/weekly-plans/suggest-replacement", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          day,
-          date,
-          excludeRecipeIds: usedRecipeIds,
-          events: getEventsForDay(date),
-        }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to get suggestion");
-      }
-
-      const data = await response.json();
-      wizard.addMealToDay(day, date, {
-        recipeId: data.suggestion.recipeId,
-        recipeName: data.suggestion.recipeName,
-        recipeTimeRating: data.suggestion.recipeTimeRating,
-        aiReasoning: data.suggestion.aiReasoning,
-        isAiSuggested: true,
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
-    } finally {
-      setIsAddingMeal(false);
-    }
-  };
 
   // Check if all meals have been assigned
   const unassignedMeals = wizard.proposedMeals.filter((m) => !m.assignedUserId);
@@ -1014,36 +923,140 @@ export default function ReviewPage() {
         )}
       </div>
 
-      {/* AI explanation */}
-      {wizard.aiExplanation && (
-        <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 mb-6">
-          <div className="flex items-start gap-3">
-            <div className="flex-shrink-0 w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-              <svg
-                className="w-4 h-4 text-purple-600"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M13 10V3L4 14h7v7l9-11h-7z"
-                />
-              </svg>
-            </div>
-            <div>
-              <h3 className="text-sm font-medium text-purple-900">
-                AI Planning Strategy
-              </h3>
-              <p className="text-sm text-purple-700 mt-1">
-                {wizard.aiExplanation}
-              </p>
-            </div>
-          </div>
+      {/* Recipe Queue Panel */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
+        <div className="flex items-center gap-2 mb-3">
+          <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+          </svg>
+          <h2 className="text-sm font-semibold text-gray-900">Recipe Queue</h2>
+          {queueItems.length > 0 && (
+            <span className="text-xs px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full">
+              {queueItems.length}
+            </span>
+          )}
         </div>
-      )}
+        {queueItems.length === 0 ? (
+          <p className="text-sm text-gray-500">
+            No recipes in your queue. Pick from your recipe library or browse recipes to add some.
+          </p>
+        ) : (
+          <>
+            {/* Mobile: vertical compact list */}
+            <div className="md:hidden space-y-2">
+              {[...queueItems]
+                .sort((a, b) => {
+                  const aAssigned = assignedQueueIds.has(a.id) ? 1 : 0;
+                  const bAssigned = assignedQueueIds.has(b.id) ? 1 : 0;
+                  return aAssigned - bAssigned;
+                })
+                .map((item) => {
+                  const isAssigned = assignedQueueIds.has(item.id);
+                  const isOtherUser = queueCurrentUserId && item.user_id !== queueCurrentUserId;
+                  const timeRating = item.recipes.time_rating
+                    ? { label: TIME_RATING_LABELS[item.recipes.time_rating], color: TIME_RATING_COLORS[item.recipes.time_rating] }
+                    : null;
+
+                  return (
+                    <div
+                      key={item.id}
+                      className={`flex items-center gap-3 border rounded-lg px-3 py-2.5 transition-colors ${
+                        isAssigned
+                          ? "border-gray-100 bg-gray-50 opacity-60"
+                          : "border-gray-200 bg-white"
+                      }`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className={`text-sm font-medium truncate ${isAssigned ? "line-through text-gray-400" : "text-gray-900"}`}>
+                          {item.recipes.name}
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          {timeRating && (
+                            <span className={`text-xs px-1.5 py-0.5 rounded ${timeRating.color}`}>
+                              {timeRating.label}
+                            </span>
+                          )}
+                          {isOtherUser && (
+                            <span className="text-xs text-gray-500">
+                              by {item.users.name}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {isAssigned ? (
+                        <div className="flex-shrink-0 text-emerald-600">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setDayPickerQueueItem(item)}
+                          className="flex-shrink-0 text-sm px-4 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg active:bg-emerald-200 transition-colors min-h-[44px] font-medium"
+                        >
+                          Add
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+
+            {/* Desktop: horizontal card layout */}
+            <div className="hidden md:flex gap-3 flex-wrap">
+              {queueItems.map((item) => {
+                const isAssigned = assignedQueueIds.has(item.id);
+                const isOtherUser = queueCurrentUserId && item.user_id !== queueCurrentUserId;
+                const timeRating = item.recipes.time_rating
+                  ? { label: TIME_RATING_LABELS[item.recipes.time_rating], color: TIME_RATING_COLORS[item.recipes.time_rating] }
+                  : null;
+
+                return (
+                  <div
+                    key={item.id}
+                    className={`min-w-[200px] max-w-[240px] border rounded-lg p-3 transition-colors ${
+                      isAssigned
+                        ? "border-gray-200 bg-gray-50 opacity-60"
+                        : "border-gray-200 bg-white"
+                    }`}
+                  >
+                    <div className={`text-sm font-medium ${isAssigned ? "line-through text-gray-400" : "text-gray-900"}`}>
+                      {item.recipes.name}
+                    </div>
+                    <div className="flex items-center gap-2 mt-1">
+                      {timeRating && (
+                        <span className={`text-xs px-1.5 py-0.5 rounded ${timeRating.color}`}>
+                          {timeRating.label}
+                        </span>
+                      )}
+                      {isOtherUser && (
+                        <span className="text-xs text-gray-500">
+                          by {item.users.name}
+                        </span>
+                      )}
+                    </div>
+                    {isAssigned ? (
+                      <div className="mt-2 text-xs text-emerald-600 font-medium flex items-center gap-1">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Added to plan
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setDayPickerQueueItem(item)}
+                        className="mt-2 w-full text-sm px-3 py-2.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg hover:bg-emerald-100 active:bg-emerald-200 transition-colors min-h-[44px] font-medium"
+                      >
+                        Add to day
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
 
       {/* Day slots with drag and drop */}
       <DndContext
@@ -1063,18 +1076,14 @@ export default function ReviewPage() {
                 date={date}
                 events={getEventsForDay(date)}
                 meals={meals}
-                onReplace={handleReplaceMeal}
                 onRemove={handleRemoveMeal}
                 onAssign={handleAssignUser}
                 onMove={handleOpenMoveModal}
                 onPickRecipe={handleOpenRecipePicker}
-                onAddMealWithAI={handleAddMeal}
                 onAddRecipe={handleAddRecipe}
-                replacingMealId={replacingMealId}
                 isDraggedOver={false}
                 householdMembers={householdMembers}
                 isMobile={isMobile}
-                isAddingMeal={isAddingMeal}
                 recipes={recipes}
                 usedRecipeIds={usedRecipeIds}
               />
@@ -1086,16 +1095,6 @@ export default function ReviewPage() {
           {activeMeal ? <MealDragOverlay meal={activeMeal} /> : null}
         </DragOverlay>
       </DndContext>
-
-      {/* Loading overlay for adding meal */}
-      {isAddingMeal && (
-        <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-4 flex items-center gap-3">
-            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-emerald-600"></div>
-            <span className="text-gray-700">Getting AI suggestion...</span>
-          </div>
-        </div>
-      )}
 
       {/* Move meal modal - mobile only */}
       {movingMeal && (
@@ -1152,6 +1151,74 @@ export default function ReviewPage() {
             <div className="px-4 py-3 border-t bg-gray-50">
               <button
                 onClick={() => setMovingMeal(null)}
+                className="w-full py-3 text-gray-600 hover:text-gray-800 transition-colors min-h-[44px]"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Queue day picker modal */}
+      {dayPickerQueueItem && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-50 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setDayPickerQueueItem(null);
+          }}
+        >
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in slide-in-from-bottom duration-200 md:animate-none">
+            <div className="px-4 py-3 border-b bg-gray-50">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-gray-900">Pick a Day</h3>
+                <button
+                  onClick={() => setDayPickerQueueItem(null)}
+                  className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                  <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <p className="text-sm text-gray-600 mt-1">
+                Add &ldquo;{dayPickerQueueItem.recipes.name}&rdquo; to:
+              </p>
+            </div>
+            <div className="p-4">
+              <div className="grid grid-cols-1 gap-2">
+                {weekDates.map((date, index) => {
+                  const day = index + 1;
+                  const dayLabel = DAY_NAMES[index];
+                  const dateLabel = new Date(date + "T00:00:00").toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                  });
+                  const mealsOnDay = wizard.proposedMeals.filter((m) => m.day === day);
+
+                  return (
+                    <button
+                      key={day}
+                      onClick={() => handleAddQueueItemToDay(dayPickerQueueItem, day)}
+                      className="flex items-center justify-between px-4 py-3 rounded-lg min-h-[52px] bg-gray-50 hover:bg-emerald-50 active:bg-emerald-100 text-gray-900 transition-colors"
+                    >
+                      <span className="font-medium">{dayLabel}</span>
+                      <div className="flex items-center gap-2">
+                        {mealsOnDay.length > 0 && (
+                          <span className="text-xs text-gray-400">
+                            {mealsOnDay.length} {mealsOnDay.length === 1 ? "meal" : "meals"}
+                          </span>
+                        )}
+                        <span className="text-sm text-gray-500">{dateLabel}</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="px-4 py-3 border-t bg-gray-50">
+              <button
+                onClick={() => setDayPickerQueueItem(null)}
                 className="w-full py-3 text-gray-600 hover:text-gray-800 transition-colors min-h-[44px]"
               >
                 Cancel
@@ -1259,7 +1326,7 @@ export default function ReviewPage() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <p className="text-blue-800">
-            Search for a recipe on any day or use &quot;AI suggestion&quot; to start planning your meals.
+            Search for a recipe on any day to start planning your meals, or add recipes from the queue above.
           </p>
         </div>
       )}

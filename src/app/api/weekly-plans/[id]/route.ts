@@ -38,7 +38,7 @@ export async function GET(
         meal_type,
         custom_meal_name,
         is_leftover,
-        is_ai_suggested,
+
         notes,
         assigned_user_id,
         recipes (
