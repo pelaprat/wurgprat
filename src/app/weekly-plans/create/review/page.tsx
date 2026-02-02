@@ -299,11 +299,13 @@ interface DaySlotProps {
   onMove: (meal: ProposedMeal) => void;
   onPickRecipe: (mealId: string) => void;
   onAddRecipe: (day: number, date: string, recipe: Recipe) => void;
+  onOpenQueuePicker: (day: number) => void;
   isDraggedOver: boolean;
   householdMembers: HouseholdMember[];
   isMobile: boolean;
   recipes: Recipe[];
   usedRecipeIds: string[];
+  hasQueueItems: boolean;
 }
 
 function DaySlot({
@@ -316,11 +318,13 @@ function DaySlot({
   onMove,
   onPickRecipe,
   onAddRecipe,
+  onOpenQueuePicker,
   isDraggedOver,
   householdMembers,
   isMobile,
   recipes,
   usedRecipeIds,
+  hasQueueItems,
 }: DaySlotProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: `day-${day}`,
@@ -414,19 +418,33 @@ function DaySlot({
                 isMobile={isMobile}
               />
             ))}
-            {/* Add another meal - inline search */}
+            {/* Add another meal - inline search + queue */}
             <div className="border-2 border-dashed border-gray-200 rounded-lg p-2">
-              <div className="relative">
-                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                <input
-                  type="text"
-                  placeholder="Add another dinner..."
-                  value={recipeSearch}
-                  onChange={(e) => setRecipeSearch(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                />
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  <input
+                    type="text"
+                    placeholder="Add another dinner..."
+                    value={recipeSearch}
+                    onChange={(e) => setRecipeSearch(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  />
+                </div>
+                {hasQueueItems && (
+                  <button
+                    onClick={() => onOpenQueuePicker(day)}
+                    className="flex-shrink-0 px-3 py-2 text-sm bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg hover:bg-emerald-100 active:bg-emerald-200 transition-colors font-medium flex items-center gap-1.5 min-h-[44px]"
+                    title="Pick from queue"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                    Queue
+                  </button>
+                )}
               </div>
               {filteredRecipes.length > 0 && (
                 <div className="mt-2 space-y-1">
@@ -468,20 +486,34 @@ function DaySlot({
             </div>
           </>
         ) : (
-          /* Empty state - inline recipe search */
+          /* Empty state - inline recipe search + queue */
           <div className="border-2 border-dashed border-gray-200 rounded-lg p-3">
-            {/* Search input */}
-            <div className="relative">
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                type="text"
-                placeholder="Search recipes..."
-                value={recipeSearch}
-                onChange={(e) => setRecipeSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-              />
+            {/* Search input + queue button */}
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  placeholder="Search recipes..."
+                  value={recipeSearch}
+                  onChange={(e) => setRecipeSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                />
+              </div>
+              {hasQueueItems && (
+                <button
+                  onClick={() => onOpenQueuePicker(day)}
+                  className="flex-shrink-0 px-3 py-2.5 text-sm bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg hover:bg-emerald-100 active:bg-emerald-200 transition-colors font-medium flex items-center gap-1.5 min-h-[44px]"
+                  title="Pick from queue"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                  </svg>
+                  Queue
+                </button>
+              )}
             </div>
 
             {/* Recipe results */}
@@ -548,7 +580,7 @@ export default function ReviewPage() {
   const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
   const [queueCurrentUserId, setQueueCurrentUserId] = useState<string | null>(null);
   const [assignedQueueIds, setAssignedQueueIds] = useState<Set<string>>(new Set());
-  const [dayPickerQueueItem, setDayPickerQueueItem] = useState<QueueItem | null>(null);
+  const [queuePickerDay, setQueuePickerDay] = useState<number | null>(null);
 
   // Saturday options for dropdown
   const saturdayOptions = useMemo(() => getSaturdayOptions(), []);
@@ -653,7 +685,6 @@ export default function ReviewPage() {
     });
 
     setAssignedQueueIds((prev) => { const next = new Set(Array.from(prev)); next.add(queueItem.id); return next; });
-    setDayPickerQueueItem(null);
   };
 
   const sensors = useSensors(
@@ -923,141 +954,6 @@ export default function ReviewPage() {
         )}
       </div>
 
-      {/* Recipe Queue Panel */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
-        <div className="flex items-center gap-2 mb-3">
-          <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-          </svg>
-          <h2 className="text-sm font-semibold text-gray-900">Recipe Queue</h2>
-          {queueItems.length > 0 && (
-            <span className="text-xs px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full">
-              {queueItems.length}
-            </span>
-          )}
-        </div>
-        {queueItems.length === 0 ? (
-          <p className="text-sm text-gray-500">
-            No recipes in your queue. Pick from your recipe library or browse recipes to add some.
-          </p>
-        ) : (
-          <>
-            {/* Mobile: vertical compact list */}
-            <div className="md:hidden space-y-2">
-              {[...queueItems]
-                .sort((a, b) => {
-                  const aAssigned = assignedQueueIds.has(a.id) ? 1 : 0;
-                  const bAssigned = assignedQueueIds.has(b.id) ? 1 : 0;
-                  return aAssigned - bAssigned;
-                })
-                .map((item) => {
-                  const isAssigned = assignedQueueIds.has(item.id);
-                  const isOtherUser = queueCurrentUserId && item.user_id !== queueCurrentUserId;
-                  const timeRating = item.recipes.time_rating
-                    ? { label: TIME_RATING_LABELS[item.recipes.time_rating], color: TIME_RATING_COLORS[item.recipes.time_rating] }
-                    : null;
-
-                  return (
-                    <div
-                      key={item.id}
-                      className={`flex items-center gap-3 border rounded-lg px-3 py-2.5 transition-colors ${
-                        isAssigned
-                          ? "border-gray-100 bg-gray-50 opacity-60"
-                          : "border-gray-200 bg-white"
-                      }`}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className={`text-sm font-medium truncate ${isAssigned ? "line-through text-gray-400" : "text-gray-900"}`}>
-                          {item.recipes.name}
-                        </div>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          {timeRating && (
-                            <span className={`text-xs px-1.5 py-0.5 rounded ${timeRating.color}`}>
-                              {timeRating.label}
-                            </span>
-                          )}
-                          {isOtherUser && (
-                            <span className="text-xs text-gray-500">
-                              by {item.users.name}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      {isAssigned ? (
-                        <div className="flex-shrink-0 text-emerald-600">
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => setDayPickerQueueItem(item)}
-                          className="flex-shrink-0 text-sm px-4 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg active:bg-emerald-200 transition-colors min-h-[44px] font-medium"
-                        >
-                          Add
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-            </div>
-
-            {/* Desktop: horizontal card layout */}
-            <div className="hidden md:flex gap-3 flex-wrap">
-              {queueItems.map((item) => {
-                const isAssigned = assignedQueueIds.has(item.id);
-                const isOtherUser = queueCurrentUserId && item.user_id !== queueCurrentUserId;
-                const timeRating = item.recipes.time_rating
-                  ? { label: TIME_RATING_LABELS[item.recipes.time_rating], color: TIME_RATING_COLORS[item.recipes.time_rating] }
-                  : null;
-
-                return (
-                  <div
-                    key={item.id}
-                    className={`min-w-[200px] max-w-[240px] border rounded-lg p-3 transition-colors ${
-                      isAssigned
-                        ? "border-gray-200 bg-gray-50 opacity-60"
-                        : "border-gray-200 bg-white"
-                    }`}
-                  >
-                    <div className={`text-sm font-medium ${isAssigned ? "line-through text-gray-400" : "text-gray-900"}`}>
-                      {item.recipes.name}
-                    </div>
-                    <div className="flex items-center gap-2 mt-1">
-                      {timeRating && (
-                        <span className={`text-xs px-1.5 py-0.5 rounded ${timeRating.color}`}>
-                          {timeRating.label}
-                        </span>
-                      )}
-                      {isOtherUser && (
-                        <span className="text-xs text-gray-500">
-                          by {item.users.name}
-                        </span>
-                      )}
-                    </div>
-                    {isAssigned ? (
-                      <div className="mt-2 text-xs text-emerald-600 font-medium flex items-center gap-1">
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                        Added to plan
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => setDayPickerQueueItem(item)}
-                        className="mt-2 w-full text-sm px-3 py-2.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg hover:bg-emerald-100 active:bg-emerald-200 transition-colors min-h-[44px] font-medium"
-                      >
-                        Add to day
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        )}
-      </div>
-
       {/* Day slots with drag and drop */}
       <DndContext
         sensors={sensors}
@@ -1081,11 +977,13 @@ export default function ReviewPage() {
                 onMove={handleOpenMoveModal}
                 onPickRecipe={handleOpenRecipePicker}
                 onAddRecipe={handleAddRecipe}
+                onOpenQueuePicker={setQueuePickerDay}
                 isDraggedOver={false}
                 householdMembers={householdMembers}
                 isMobile={isMobile}
                 recipes={recipes}
                 usedRecipeIds={usedRecipeIds}
+                hasQueueItems={queueItems.length > 0}
               />
             );
           })}
@@ -1160,20 +1058,22 @@ export default function ReviewPage() {
         </div>
       )}
 
-      {/* Queue day picker modal */}
-      {dayPickerQueueItem && (
+      {/* Queue picker modal - pick a recipe from the queue for a specific day */}
+      {queuePickerDay !== null && (
         <div
           className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-50 p-4"
           onClick={(e) => {
-            if (e.target === e.currentTarget) setDayPickerQueueItem(null);
+            if (e.target === e.currentTarget) setQueuePickerDay(null);
           }}
         >
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in slide-in-from-bottom duration-200 md:animate-none">
-            <div className="px-4 py-3 border-b bg-gray-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in slide-in-from-bottom duration-200 md:animate-none max-h-[80vh] flex flex-col">
+            <div className="px-4 py-3 border-b bg-gray-50 flex-shrink-0">
               <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-gray-900">Pick a Day</h3>
+                <h3 className="font-semibold text-gray-900">
+                  Queue &mdash; {DAY_NAMES[queuePickerDay - 1]}
+                </h3>
                 <button
-                  onClick={() => setDayPickerQueueItem(null)}
+                  onClick={() => setQueuePickerDay(null)}
                   className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-gray-200 rounded-lg transition-colors"
                 >
                   <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1182,46 +1082,86 @@ export default function ReviewPage() {
                 </button>
               </div>
               <p className="text-sm text-gray-600 mt-1">
-                Add &ldquo;{dayPickerQueueItem.recipes.name}&rdquo; to:
+                Pick a recipe to add
               </p>
             </div>
-            <div className="p-4">
-              <div className="grid grid-cols-1 gap-2">
-                {weekDates.map((date, index) => {
-                  const day = index + 1;
-                  const dayLabel = DAY_NAMES[index];
-                  const dateLabel = new Date(date + "T00:00:00").toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                  });
-                  const mealsOnDay = wizard.proposedMeals.filter((m) => m.day === day);
+            <div className="flex-1 overflow-y-auto p-3">
+              {queueItems.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-6">
+                  No recipes in your queue.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {[...queueItems]
+                    .sort((a, b) => {
+                      const aAssigned = assignedQueueIds.has(a.id) ? 1 : 0;
+                      const bAssigned = assignedQueueIds.has(b.id) ? 1 : 0;
+                      return aAssigned - bAssigned;
+                    })
+                    .map((item) => {
+                      const isAssigned = assignedQueueIds.has(item.id);
+                      const isOtherUser = queueCurrentUserId && item.user_id !== queueCurrentUserId;
+                      const timeRating = item.recipes.time_rating
+                        ? { label: TIME_RATING_LABELS[item.recipes.time_rating], color: TIME_RATING_COLORS[item.recipes.time_rating] }
+                        : null;
 
-                  return (
-                    <button
-                      key={day}
-                      onClick={() => handleAddQueueItemToDay(dayPickerQueueItem, day)}
-                      className="flex items-center justify-between px-4 py-3 rounded-lg min-h-[52px] bg-gray-50 hover:bg-emerald-50 active:bg-emerald-100 text-gray-900 transition-colors"
-                    >
-                      <span className="font-medium">{dayLabel}</span>
-                      <div className="flex items-center gap-2">
-                        {mealsOnDay.length > 0 && (
-                          <span className="text-xs text-gray-400">
-                            {mealsOnDay.length} {mealsOnDay.length === 1 ? "meal" : "meals"}
-                          </span>
-                        )}
-                        <span className="text-sm text-gray-500">{dateLabel}</span>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => {
+                            if (!isAssigned) {
+                              handleAddQueueItemToDay(item, queuePickerDay);
+                            }
+                          }}
+                          disabled={isAssigned}
+                          className={`w-full text-left flex items-center gap-3 border rounded-lg px-3 py-3 transition-colors min-h-[52px] ${
+                            isAssigned
+                              ? "border-gray-100 bg-gray-50 cursor-not-allowed"
+                              : "border-gray-200 bg-white hover:bg-emerald-50 active:bg-emerald-100"
+                          }`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className={`text-sm font-medium truncate ${isAssigned ? "line-through text-gray-400" : "text-gray-900"}`}>
+                              {item.recipes.name}
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              {timeRating && (
+                                <span className={`text-xs px-1.5 py-0.5 rounded ${isAssigned ? "opacity-50" : ""} ${timeRating.color}`}>
+                                  {timeRating.label}
+                                </span>
+                              )}
+                              {isOtherUser && (
+                                <span className="text-xs text-gray-500">
+                                  by {item.users.name}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {isAssigned ? (
+                            <div className="flex-shrink-0 text-emerald-600">
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            </div>
+                          ) : (
+                            <div className="flex-shrink-0 text-emerald-600">
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                              </svg>
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                </div>
+              )}
             </div>
-            <div className="px-4 py-3 border-t bg-gray-50">
+            <div className="px-4 py-3 border-t bg-gray-50 flex-shrink-0">
               <button
-                onClick={() => setDayPickerQueueItem(null)}
+                onClick={() => setQueuePickerDay(null)}
                 className="w-full py-3 text-gray-600 hover:text-gray-800 transition-colors min-h-[44px]"
               >
-                Cancel
+                Done
               </button>
             </div>
           </div>
@@ -1326,7 +1266,7 @@ export default function ReviewPage() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <p className="text-blue-800">
-            Search for a recipe on any day to start planning your meals, or add recipes from the queue above.
+            Search for a recipe on any day to start planning your meals, or use the Queue button to pick from your recipe queue.
           </p>
         </div>
       )}
