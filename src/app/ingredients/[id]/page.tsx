@@ -382,7 +382,7 @@ export default function IngredientDetailPage() {
                     <div className="flex items-center space-x-3">
                       {ri.quantity && (
                         <span className="text-sm text-gray-500">
-                          {ri.quantity} {ri.unit}
+                          {parseFloat(ri.quantity.toFixed(2))} {ri.unit}
                         </span>
                       )}
                       <span

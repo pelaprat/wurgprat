@@ -325,28 +325,21 @@ export default function RecipesPage() {
                             {recipe.average_rating % 1 >= 0.5 && "½"}
                           </span>
                         )}
+                        <button
+                          onClick={(e) => handleToggleQueue(e, recipe.id)}
+                          className={`ml-auto px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${
+                            queuedRecipeIds.has(recipe.id)
+                              ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
+                              : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                          }`}
+                        >
+                          {queuedRecipeIds.has(recipe.id) ? "Queued" : "Queue"}
+                        </button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1 flex-shrink-0 mt-1">
-                      <button
-                        onClick={(e) => handleToggleQueue(e, recipe.id)}
-                        className="p-1 rounded-full hover:bg-gray-100 transition-colors"
-                        title={queuedRecipeIds.has(recipe.id) ? "Remove from queue" : "Eat Soon"}
-                      >
-                        {queuedRecipeIds.has(recipe.id) ? (
-                          <svg className="w-5 h-5 text-amber-500" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7V7z" />
-                          </svg>
-                        ) : (
-                          <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        )}
-                      </button>
-                      <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </div>
+                    <svg className="w-5 h-5 text-gray-400 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
                   </div>
                 </Link>
               );
@@ -429,18 +422,13 @@ export default function RecipesPage() {
                     <td className="px-4 py-3 text-center">
                       <button
                         onClick={(e) => handleToggleQueue(e, recipe.id)}
-                        className="p-1 rounded-full hover:bg-gray-100 transition-colors mx-auto"
-                        title={queuedRecipeIds.has(recipe.id) ? "Remove from queue" : "Eat Soon"}
+                        className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                          queuedRecipeIds.has(recipe.id)
+                            ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
+                            : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                        }`}
                       >
-                        {queuedRecipeIds.has(recipe.id) ? (
-                          <svg className="w-5 h-5 text-amber-500" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7V7z" />
-                          </svg>
-                        ) : (
-                          <svg className="w-5 h-5 text-gray-400 hover:text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        )}
+                        {queuedRecipeIds.has(recipe.id) ? "Queued" : "Queue"}
                       </button>
                     </td>
                   </tr>

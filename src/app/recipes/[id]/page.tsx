@@ -593,22 +593,34 @@ export default function RecipeDetailPage() {
               </svg>
             </h1>
           )}
-          {recipe.source && (
-            <p className="text-gray-600">
-              {recipe.source_url ? (
-                <a
-                  href={recipe.source_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-emerald-600 hover:text-emerald-700"
-                >
-                  {recipe.source} &rarr;
-                </a>
-              ) : (
-                recipe.source
-              )}
-            </p>
-          )}
+          <div className="flex items-center justify-between">
+            {recipe.source && (
+              <p className="text-gray-600">
+                {recipe.source_url ? (
+                  <a
+                    href={recipe.source_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-emerald-600 hover:text-emerald-700"
+                  >
+                    {recipe.source} &rarr;
+                  </a>
+                ) : (
+                  recipe.source
+                )}
+              </p>
+            )}
+            <button
+              onClick={handleToggleQueue}
+              className={`ml-auto px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+                isQueued
+                  ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
+                  : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+              }`}
+            >
+              {isQueued ? "Queued" : "Queue"}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -804,7 +816,7 @@ export default function RecipeDetailPage() {
                           <span className="text-emerald-600 mr-2">*</span>
                           <span>
                             {ri.quantity && (
-                              <span className="font-medium">{ri.quantity}</span>
+                              <span className="font-medium">{parseFloat(ri.quantity.toFixed(2))}</span>
                             )}
                             {ri.unit && <span className="ml-1">{ri.unit}</span>}
                             <span className="ml-1">{ri.ingredient?.name || "Unknown ingredient"}</span>
@@ -997,30 +1009,6 @@ export default function RecipeDetailPage() {
                   </button>
                 </>
               )}
-              <button
-                onClick={handleToggleQueue}
-                className={`w-full px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-2 ${
-                  isQueued
-                    ? "bg-amber-100 text-amber-700 border border-amber-300 hover:bg-amber-200"
-                    : "bg-amber-500 text-white hover:bg-amber-600"
-                }`}
-              >
-                {isQueued ? (
-                  <>
-                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7V7z" />
-                    </svg>
-                    Remove from Queue
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    Eat Soon
-                  </>
-                )}
-              </button>
               <button
                 onClick={handleDelete}
                 className="w-full px-4 py-2 text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition-colors"

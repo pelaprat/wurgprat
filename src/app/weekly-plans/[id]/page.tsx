@@ -1205,7 +1205,7 @@ export default function WeeklyPlanDetailPage() {
                                       </span>
                                       {item.quantity && (
                                         <span className={`text-sm font-medium ${item.checked ? "text-gray-400" : "text-gray-600"}`}>
-                                          {item.quantity}{item.unit ? ` ${item.unit}` : ""}
+                                          {parseFloat(Number(item.quantity).toFixed(2))}{item.unit ? ` ${item.unit}` : ""}
                                         </span>
                                       )}
                                     </div>
@@ -1215,7 +1215,7 @@ export default function WeeklyPlanDetailPage() {
                                           <div key={idx} className="flex justify-between">
                                             <span className="truncate mr-2">{rb.recipe_name}</span>
                                             <span className="whitespace-nowrap">
-                                              {rb.quantity ?? "—"}{rb.unit ? ` ${rb.unit}` : ""}
+                                              {rb.quantity != null ? parseFloat(Number(rb.quantity).toFixed(2)) : "—"}{rb.unit ? ` ${rb.unit}` : ""}
                                             </span>
                                           </div>
                                         ))}
