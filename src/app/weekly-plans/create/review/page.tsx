@@ -652,7 +652,7 @@ export default function ReviewPage() {
       recipeTimeRating: queueItem.recipes.time_rating ?? undefined,
     });
 
-    setAssignedQueueIds((prev) => new Set([...prev, queueItem.id]));
+    setAssignedQueueIds((prev) => { const next = new Set(Array.from(prev)); next.add(queueItem.id); return next; });
     setDayPickerQueueItem(null);
   };
 
