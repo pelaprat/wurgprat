@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+
+# Block API routes
+Disallow: /api/
+
+# Block private/internal pages
+Disallow: /settings/
+Disallow: /onboarding/
+
+# Sitemap
+Sitemap: https://wurgprat.com/sitemap.xml
